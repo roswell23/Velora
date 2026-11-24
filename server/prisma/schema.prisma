@@ -1,0 +1,301 @@
+// VÉLORA — Prisma Schema
+// Reflects the approved ERD in docs/database/erd.md
+// Run: npx prisma migrate dev --name init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enumerations
+// ---------------------------------------------------------------------------
+
+enum Role {
+  CUSTOMER
+  ADMIN
+  SALES
+  INVENTORY
+  FINANCE
+}
+
+enum OrderSource {
+  ONLINE
+  INTERNAL
+}
+
+enum OrderStatus {
+  PENDING
+  FULFILLED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+}
+
+enum PaymentMethod {
+  COD
+}
+
+enum PaymentRecordMethod {
+  CASH
+  BANK_TRANSFER
+  OTHER
+}
+
+enum StockMovementType {
+  STOCK_IN
+  SALE
+  ADJUSTMENT
+}
+
+// ---------------------------------------------------------------------------
+// User — Staff and customer accounts
+// ---------------------------------------------------------------------------
+
+model User {
+  id           Int      @id @default(autoincrement())
+  name         String   @db.VarChar(100)
+  email        String   @unique @db.VarChar(255)
+  passwordHash String   @db.VarChar(255)
+  role         Role
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  customer           Customer?            @relation("UserCustomer")
+  createdOrders      Order[]              @relation("OrderCreatedBy")
+  fulfilledOrders    Order[]              @relation("OrderFulfilledBy")
+  recordedPayments   Payment[]
+  stockMovements     StockMovement[]
+  passwordResetTokens PasswordResetToken[]
+  auditLogs          AuditLog[]
+
+  @@index([role])
+  @@map("users")
+}
+
+// ---------------------------------------------------------------------------
+// Customer — Registered online customers and walk-in clients
+// ---------------------------------------------------------------------------
+
+model Customer {
+  id        Int      @id @default(autoincrement())
+  userId    Int?     @unique // null for walk-in customers
+  name      String   @db.VarChar(100)
+  phone     String   @db.VarChar(30)
+  email     String?  @db.VarChar(255)
+  address   String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user   User?   @relation("UserCustomer", fields: [userId], references: [id])
+  orders Order[]
+
+  @@index([name])
+  @@index([phone])
+  @@index([email])
+  @@map("customers")
+}
+
+// ---------------------------------------------------------------------------
+// Category — Fragrance olfactory classifications
+// ---------------------------------------------------------------------------
+
+model Category {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique @db.VarChar(100)
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+
+  // Relations
+  products Product[]
+
+  @@map("categories")
+}
+
+// ---------------------------------------------------------------------------
+// Product — Perfume items with stock and pricing
+// ---------------------------------------------------------------------------
+
+model Product {
+  id           Int      @id @default(autoincrement())
+  categoryId   Int
+  sku          String   @unique @db.VarChar(50)
+  name         String   @db.VarChar(150)
+  brand        String   @db.VarChar(100)
+  description  String   @db.Text
+  imageUrl     String   @db.VarChar(500)
+  size         String   @db.VarChar(30)
+  unitPrice    Decimal  @db.Decimal(10, 2)
+  stock        Int      @default(0)
+  reorderLevel Int      @default(5)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  category       Category        @relation(fields: [categoryId], references: [id])
+  orderItems     OrderItem[]
+  stockMovements StockMovement[]
+
+  @@index([categoryId])
+  @@index([isActive])
+  @@index([name])
+  @@map("products")
+}
+
+// ---------------------------------------------------------------------------
+// Order — Online and internal orders
+// ---------------------------------------------------------------------------
+
+model Order {
+  id              Int           @id @default(autoincrement())
+  orderNumber     String        @unique @db.VarChar(50)
+  customerId      Int
+  source          OrderSource
+  createdById     Int? // null for ONLINE orders (created by customer)
+  status          OrderStatus   @default(PENDING)
+  paymentStatus   PaymentStatus @default(UNPAID)
+  paymentMethod   PaymentMethod @default(COD)
+  deliveryAddress String        @db.Text
+  total           Decimal       @db.Decimal(10, 2)
+  createdAt       DateTime      @default(now())
+  fulfilledAt     DateTime?
+  fulfilledById   Int?
+
+  // Relations
+  customer        Customer        @relation(fields: [customerId], references: [id])
+  createdBy       User?           @relation("OrderCreatedBy", fields: [createdById], references: [id])
+  fulfilledBy     User?           @relation("OrderFulfilledBy", fields: [fulfilledById], references: [id])
+  items           OrderItem[]
+  payment         Payment?
+  stockMovements  StockMovement[]
+
+  @@index([status])
+  @@index([source])
+  @@index([paymentStatus])
+  @@index([customerId])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+// ---------------------------------------------------------------------------
+// OrderItem — Snapshotted line items per order
+// ---------------------------------------------------------------------------
+
+model OrderItem {
+  id          Int     @id @default(autoincrement())
+  orderId     Int
+  productId   Int
+  productName String  @db.VarChar(150)
+  unitPrice   Decimal @db.Decimal(10, 2)
+  quantity    Int
+  lineTotal   Decimal @db.Decimal(10, 2)
+
+  // Relations
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
+  @@map("order_items")
+}
+
+// ---------------------------------------------------------------------------
+// Payment — COD collection receipts (1:1 with Order)
+// ---------------------------------------------------------------------------
+
+model Payment {
+  id           Int                 @id @default(autoincrement())
+  orderId      Int                 @unique
+  amount       Decimal             @db.Decimal(10, 2)
+  method       PaymentRecordMethod @default(CASH)
+  referenceNo  String?             @db.VarChar(100)
+  recordedById Int
+  paidAt       DateTime            @default(now())
+
+  // Relations
+  order      Order @relation(fields: [orderId], references: [id])
+  recordedBy User  @relation(fields: [recordedById], references: [id])
+
+  @@index([paidAt])
+  @@map("payments")
+}
+
+// ---------------------------------------------------------------------------
+// StockMovement — Immutable audit trail for all stock changes
+// ---------------------------------------------------------------------------
+
+model StockMovement {
+  id               Int               @id @default(autoincrement())
+  productId        Int
+  type             StockMovementType
+  quantity         Int // signed: positive = increase, negative = decrease
+  unitCost         Decimal?          @db.Decimal(10, 2)
+  reason           String?           @db.Text
+  referenceOrderId Int?
+  performedById    Int
+  createdAt        DateTime          @default(now())
+
+  // Relations
+  product        Product @relation(fields: [productId], references: [id])
+  referenceOrder Order?  @relation(fields: [referenceOrderId], references: [id])
+  performedBy    User    @relation(fields: [performedById], references: [id])
+
+  @@index([productId])
+  @@index([type])
+  @@index([createdAt])
+  @@map("stock_movements")
+}
+
+// ---------------------------------------------------------------------------
+// PasswordResetToken — Secure single-use SHA-256 tokens (30-min TTL)
+// ---------------------------------------------------------------------------
+
+model PasswordResetToken {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  tokenHash String    @unique @db.VarChar(64)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// AuditLog — Administrative audit trail (optional but wired)
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  actorId    Int?
+  action     String   @db.VarChar(100)
+  entityType String   @db.VarChar(50)
+  entityId   String   @db.VarChar(50)
+  details    String?  @db.Text
+  createdAt  DateTime @default(now())
+
+  // Relations
+  actor User? @relation(fields: [actorId], references: [id])
+
+  @@index([action])
+  @@index([entityType])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

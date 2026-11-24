@@ -1,0 +1,29 @@
+{
+  "name": "velora",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "VÉLORA — E-Commerce + ERP Integrated System",
+  "workspaces": [
+    "client/customer",
+    "client/admin",
+    "server"
+  ],
+  "scripts": {
+    "dev:server": "npm run dev --workspace=server",
+    "dev:customer": "npm run dev --workspace=client/customer",
+    "dev:admin": "npm run dev --workspace=client/admin",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "npm run test --workspace=server --if-present"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.20.0",
+    "eslint": "^9.20.0",
+    "eslint-plugin-react": "^7.37.4",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "globals": "^15.15.0",
+    "prettier": "^3.5.0"
+  }
+}
