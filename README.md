@@ -137,7 +137,23 @@ cd ..
 
 ---
 
-### 4. Configure the Frontends (Optional)
+### 4. Install Modern Web Guidance for the Frontend Apps
+
+Each frontend has a `skills-lock.json` that pins the **Modern Web Guidance** skill version. The installed `.agents/` folders are ignored by Git, so restore the skill separately in each client before using an AI coding agent on its frontend.
+
+```bash
+cd client/customer
+npx skills install
+cd ../admin
+npx skills install
+cd ../..
+```
+
+The Vercel Skills CLI restores the locked skill from each app's `skills-lock.json`. See the [Modern Web Guidance installation options](https://github.com/GoogleChrome/modern-web-guidance#alternative-installation-methods).
+
+---
+
+### 5. Configure the Frontends (Optional)
 
 Both frontend apps use `http://localhost:5000/api` by default. To change the API URL, create `.env` in `client/customer/` or `client/admin/` and add:
 
@@ -149,9 +165,11 @@ No frontend environment file is needed for the default local setup.
 
 ---
 
-### 5. Start the Applications
+### 6. Start the Applications
 
 Open three terminals in the repository root and run one command in each.
+
+The Vite servers require the listed ports (`5173` and `5174`). If a port is already in use, stop the other dev server before starting VÉLORA; Vite is configured not to switch to a different port, which would no longer match the backend CORS allowlist.
 
 **Terminal 1 — Backend API** (`http://localhost:5000`):
 
@@ -175,7 +193,7 @@ Check the API at `http://localhost:5000/api/health`. Open the storefront at `htt
 
 ---
 
-### 6. Sign In with a Demo Staff Account
+### 7. Sign In with a Demo Staff Account
 
 The seed script sets `DemoPass123!` as the password for each demo account.
 
