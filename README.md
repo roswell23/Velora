@@ -89,7 +89,7 @@ cd Velora
 npm install
 ```
 
-`npm install` at the repository root installs dependencies for all workspaces.
+`npm install` at the repository root installs dependencies for all workspaces: `server/`, `client/customer/`, and `client/admin/`. Run it before starting any of the apps; separate `npm install` commands inside the client folders are not needed for this workspace setup.
 
 ---
 
@@ -128,12 +128,12 @@ From the repository root, run Prisma from the server directory:
 ```bash
 cd server
 npx prisma generate
-npx prisma db push
+npx prisma migrate dev --name init
 npx prisma db seed
 cd ..
 ```
 
-`prisma db push` creates or updates tables from `server/prisma/schema.prisma`. This checkout does not contain migration files. The seed script creates demo accounts, customers, categories, products, orders, payments, and stock movements. You can rerun it to restore missing demo records.
+`prisma migrate dev --name init` creates the initial migration under `server/prisma/migrations/` and applies it to the development database configured in `server/.env`. Commit the generated migration with your code. For a deployment with committed migrations, run `npx prisma migrate deploy` from `server/` before starting the API. The seed script creates demo accounts, customers, categories, products, orders, payments, and stock movements. You can rerun it to restore missing demo records.
 
 ---
 
