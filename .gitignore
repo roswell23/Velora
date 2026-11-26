@@ -46,6 +46,8 @@ Thumbs.db
 
 # Local agent tooling
 client/customer/.agents/
+client/customer/.claude/
+client/admin/.claude/
 client/admin/.agents/
 
 # Test coverage

@@ -1,70 +1,47 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, Navigate, Route, Routes } from "react-router-dom";
 import {
   ArrowDown,
   ArrowRight,
   Check,
+  ChevronLeft,
   ChevronDown,
+  ChevronRight,
   Heart,
   Menu,
   Minus,
+  Pause,
   Plus,
+  Play,
   Search,
   ShoppingBag,
   Sparkles,
+  User,
   X,
 } from "lucide-react";
+import { useAuth } from "./hooks/useAuth.jsx";
+import LoginPage from "./features/auth/LoginPage.jsx";
+import RegisterPage from "./features/auth/RegisterPage.jsx";
+import CheckoutPage from "./features/checkout/CheckoutPage.jsx";
+import { api } from "./services/apiClient.js";
+import { formatCents, formatPrice, toCents } from "./utils/formatMoney.js";
 
-const fragrances = [
-  {
-    id: 1,
-    name: "Santal Royale",
-    family: "Woody",
-    size: "100 ml · Eau de parfum",
-    price: 185,
-    stock: 10,
-    label: "SIGNATURE",
-    tone: "sand",
-  },
-  {
-    id: 2,
-    name: "Fleur de Soie",
-    family: "Floral",
-    size: "75 ml · Eau de parfum",
-    price: 162,
-    stock: 2,
-    label: "ATELIER EDIT",
-    tone: "rose",
-  },
-  {
-    id: 3,
-    name: "Ambre Nocturne",
-    family: "Oriental",
-    size: "100 ml · Eau de parfum",
-    price: 198,
-    stock: 7,
-    label: "NEW ARRIVAL",
-    tone: "amber",
-  },
-  {
-    id: 4,
-    name: "Neroli d'Été",
-    family: "Citrus",
-    size: "50 ml · Eau de parfum",
-    price: 128,
-    stock: 5,
-    label: "",
-    tone: "cream",
-  },
-];
+const familyTone = { Woody: "sand", Floral: "rose", Oriental: "amber", Citrus: "cream" };
 
-const families = ["All fragrances", "Woody", "Floral", "Oriental", "Citrus"];
-
-function formatPrice(price) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(price);
+function mapProduct(product, index) {
+  return {
+    id: product.id,
+    name: product.name,
+    brand: product.brand,
+    family: product.category?.name || "Fragrance",
+    size: `${product.size} · Eau de parfum`,
+    price: product.unitPrice,
+    stock: product.stock,
+    reorderLevel: product.reorderLevel,
+    imageUrl: product.imageUrl,
+    label: ["SIGNATURE", "ATELIER EDIT", "NEW ARRIVAL"][index] || "",
+    tone: familyTone[product.category?.name] || "sand",
+  };
 }
 
 function BottleArt({ name, tone, large = false }) {
@@ -90,10 +67,27 @@ function BottleArt({ name, tone, large = false }) {
   );
 }
 
-export default function App() {
+function StorefrontPage() {
+  const { user, loading: authLoading, logout } = useAuth();
+  const [fragrances, setFragrances] = useState([]);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState("");
+  const [catalogReloadKey, setCatalogReloadKey] = useState(0);
   const [family, setFamily] = useState("All fragrances");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("curated");
+  const [featuredId, setFeaturedId] = useState(null);
+  const [canScrollCarouselBack, setCanScrollCarouselBack] = useState(false);
+  const [canScrollCarouselForward, setCanScrollCarouselForward] = useState(false);
+  const [carouselAutoplayEnabled, setCarouselAutoplayEnabled] = useState(true);
+  const [carouselHovered, setCarouselHovered] = useState(false);
+  const [carouselFocused, setCarouselFocused] = useState(false);
+  const [carouselPointerDown, setCarouselPointerDown] = useState(false);
+  const [pageIsVisible, setPageIsVisible] = useState(() => document.visibilityState === "visible");
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(() =>
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+  const productCarouselRef = useRef(null);
   const [bag, setBag] = useState(() => {
     try {
       const storedBag = JSON.parse(localStorage.getItem("velora_boutique_bag") || "[]");
@@ -103,6 +97,8 @@ export default function App() {
     }
   });
   const [bagOpen, setBagOpen] = useState(false);
+  const bagTriggerRef = useRef(null);
+  const bagCloseRef = useRef(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [saved, setSaved] = useState([]);
 
@@ -110,20 +106,200 @@ export default function App() {
     const term = search.trim().toLowerCase();
     const filtered = fragrances.filter((item) => {
       const matchesFamily = family === "All fragrances" || item.family === family;
-      const matchesSearch = !term || `${item.name} ${item.family}`.toLowerCase().includes(term);
+      const matchesSearch =
+        !term || `${item.name} ${item.family} ${item.brand}`.toLowerCase().includes(term);
       return matchesFamily && matchesSearch;
     });
-    if (sort === "price-low") return filtered.sort((a, b) => a.price - b.price);
-    if (sort === "price-high") return filtered.sort((a, b) => b.price - a.price);
+    if (sort === "price-low") return filtered.sort((a, b) => Number(a.price) - Number(b.price));
+    if (sort === "price-high") return filtered.sort((a, b) => Number(b.price) - Number(a.price));
     return filtered;
   }, [family, search, sort]);
+  const families = useMemo(
+    () => ["All fragrances", ...new Set(fragrances.map((item) => item.family))],
+    [fragrances]
+  );
+  const featuredFragrance = fragrances.find((item) => item.id === featuredId) || fragrances[0] || null;
+
+  useEffect(() => {
+    let ignore = false;
+    setCatalogLoading(true);
+    setCatalogError("");
+
+    api
+      .get("/products?limit=100&sort=newest")
+      .then((response) => {
+        if (ignore) return;
+        const products = response.data.map(mapProduct);
+        setFragrances(products);
+        setFeaturedId(products[0]?.id ?? null);
+      })
+      .catch((error) => {
+        if (!ignore) setCatalogError(error.message || "Could not load the fragrance collection.");
+      })
+      .finally(() => {
+        if (!ignore) setCatalogLoading(false);
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [catalogReloadKey]);
+
+  useEffect(() => {
+    if (!fragrances.length) return;
+    setBag((currentBag) =>
+      currentBag.flatMap((item) => {
+        const product = fragrances.find((candidate) => candidate.name === item.name);
+        if (!product || product.stock <= 0) return [];
+        return [{ ...product, quantity: Math.min(item.quantity, product.stock) }];
+      })
+    );
+  }, [fragrances]);
+
+  const updateCarouselControls = useCallback(() => {
+    const carousel = productCarouselRef.current;
+    if (!carousel) {
+      setCanScrollCarouselBack(false);
+      setCanScrollCarouselForward(false);
+      return;
+    }
+    setCanScrollCarouselBack(carousel.scrollLeft > 2);
+    setCanScrollCarouselForward(
+      carousel.scrollLeft < carousel.scrollWidth - carousel.clientWidth - 2
+    );
+  }, []);
+
+  function moveProductCarousel(direction) {
+    const carousel = productCarouselRef.current;
+    const firstProduct = carousel?.querySelector(".product-card");
+    if (!carousel || !firstProduct) return;
+    const gap = Number.parseFloat(window.getComputedStyle(carousel).columnGap) || 0;
+    const step = firstProduct.getBoundingClientRect().width + gap;
+    const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      ? "auto"
+      : "smooth";
+    carousel.scrollBy({ left: direction * step, behavior });
+  }
 
   useEffect(() => {
     localStorage.setItem("velora_boutique_bag", JSON.stringify(bag));
   }, [bag]);
 
+  useEffect(() => {
+    const carousel = productCarouselRef.current;
+    if (!carousel) {
+      updateCarouselControls();
+      return undefined;
+    }
+    carousel.scrollTo({ left: 0, behavior: "auto" });
+    const frameId = window.requestAnimationFrame(updateCarouselControls);
+    return () => window.cancelAnimationFrame(frameId);
+  }, [visibleFragrances, family, search, sort, updateCarouselControls]);
+
+  useEffect(() => {
+    window.addEventListener("resize", updateCarouselControls);
+    return () => window.removeEventListener("resize", updateCarouselControls);
+  }, [updateCarouselControls]);
+
+  useEffect(() => {
+    const motionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const handleMotionPreference = () => setPrefersReducedMotion(motionPreference.matches);
+    const handleVisibilityChange = () => setPageIsVisible(document.visibilityState === "visible");
+
+    motionPreference.addEventListener("change", handleMotionPreference);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      motionPreference.removeEventListener("change", handleMotionPreference);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (
+      !carouselAutoplayEnabled ||
+      prefersReducedMotion ||
+      carouselHovered ||
+      carouselFocused ||
+      carouselPointerDown ||
+      !pageIsVisible ||
+      visibleFragrances.length < 2
+    ) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      const carousel = productCarouselRef.current;
+      const firstProduct = carousel?.querySelector(".product-card");
+      if (!carousel || !firstProduct) return;
+
+      const gap = Number.parseFloat(window.getComputedStyle(carousel).columnGap) || 0;
+      const step = firstProduct.getBoundingClientRect().width + gap;
+      const maximumScroll = carousel.scrollWidth - carousel.clientWidth;
+      const behavior = prefersReducedMotion ? "auto" : "smooth";
+
+      if (maximumScroll <= 2) return;
+      if (carousel.scrollLeft >= maximumScroll - 2) {
+        carousel.scrollTo({ left: 0, behavior });
+      } else if (carousel.scrollLeft + step >= maximumScroll - 2) {
+        carousel.scrollTo({ left: maximumScroll, behavior });
+      } else {
+        carousel.scrollBy({ left: step, behavior });
+      }
+    }, 4500);
+
+    return () => window.clearInterval(intervalId);
+  }, [
+    carouselAutoplayEnabled,
+    carouselFocused,
+    carouselHovered,
+    carouselPointerDown,
+    pageIsVisible,
+    prefersReducedMotion,
+    visibleFragrances,
+  ]);
+
+  useEffect(() => {
+    if (!bagOpen) return undefined;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    bagCloseRef.current?.focus();
+
+    function handleDialogKeys(event) {
+      if (event.key === "Escape") {
+        setBagOpen(false);
+        return;
+      }
+      if (event.key !== "Tab") return;
+
+      const focusable = document.querySelectorAll(
+        ".bag-drawer a[href], .bag-drawer button:not(:disabled), .bag-drawer [tabindex]:not([tabindex='-1'])"
+      );
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleDialogKeys);
+    return () => {
+      document.removeEventListener("keydown", handleDialogKeys);
+      document.body.style.overflow = previousOverflow;
+      bagTriggerRef.current?.focus();
+    };
+  }, [bagOpen]);
+
   const bagCount = bag.reduce((total, item) => total + item.quantity, 0);
-  const bagTotal = bag.reduce((total, item) => total + item.price * item.quantity, 0);
+  const bagTotalCents = bag.reduce(
+    (total, item) => total + toCents(item.price) * BigInt(item.quantity),
+    0n
+  );
 
   function addToBag(fragrance) {
     setBag((current) => {
@@ -158,6 +334,12 @@ export default function App() {
     );
   }
 
+  function resetCollection() {
+    setSearch("");
+    setFamily("All fragrances");
+    setSort("curated");
+  }
+
   return (
     <div className="storefront">
       <div className="announcement-bar">
@@ -171,6 +353,8 @@ export default function App() {
           type="button"
           className="icon-button mobile-menu-button"
           aria-label={menuOpen ? "Close navigation" : "Open navigation"}
+          aria-expanded={menuOpen}
+          aria-controls="store-navigation"
           onClick={() => setMenuOpen((open) => !open)}
         >
           {menuOpen ? <X size={20} /> : <Menu size={20} />}
@@ -178,7 +362,11 @@ export default function App() {
         <a className="wordmark" href="#top" aria-label="Vélora home">
           VÉLORA<span>®</span>
         </a>
-        <nav className={`store-nav ${menuOpen ? "is-open" : ""}`} aria-label="Main navigation">
+        <nav
+          id="store-navigation"
+          className={`store-nav ${menuOpen ? "is-open" : ""}`}
+          aria-label="Main navigation"
+        >
           <a href="#collection" onClick={() => setMenuOpen(false)}>
             Fragrances
           </a>
@@ -198,9 +386,27 @@ export default function App() {
               placeholder="Search"
             />
           </label>
+          {!authLoading &&
+            (user ? (
+              <div className="account-actions">
+                <span className="account-greeting" title={user.email}>
+                  <User size={15} strokeWidth={1.5} />
+                  <span className="account-name">{user.name.split(" ")[0]}</span>
+                </span>
+                <button type="button" className="auth-header-action" onClick={logout}>
+                  Sign out
+                </button>
+              </div>
+            ) : (
+              <Link className="auth-header-action" to="/login">
+                <User size={15} strokeWidth={1.5} />
+                <span>Sign in</span>
+              </Link>
+            ))}
           <button
             type="button"
             className="bag-trigger"
+            ref={bagTriggerRef}
             onClick={() => setBagOpen(true)}
             aria-label={`Open shopping bag, ${bagCount} items`}
           >
@@ -215,46 +421,130 @@ export default function App() {
         <section className="hero-section">
           <div className="hero-copy">
             <p className="eyebrow">
-              <span /> THE ART OF ARRIVING
+              <span /> THE VÉLORA EDIT
             </p>
             <h1>
-              Leave a little
+              A little
               <br />
               <em>of yourself</em>
               <br />
               in the air.
             </h1>
             <p className="hero-description">
-              Considered fragrances for the moments that become memories. Made slowly, worn
-              instinctively.
+              {featuredFragrance ? (
+                <>
+                  Meet <strong>{featuredFragrance.name}</strong>, a {featuredFragrance.family.toLowerCase()} fragrance
+                  made for the moments that become memories.
+                </>
+              ) : catalogLoading ? (
+                "Preparing the Vélora collection…"
+              ) : (
+                "The fragrance collection is temporarily unavailable."
+              )}
             </p>
-            <a className="button button-dark" href="#collection">
-              Discover the collection <ArrowRight size={16} />
+            {featuredFragrance && (
+              <div className="hero-product-price">
+                <span>{featuredFragrance.family} · {featuredFragrance.size.split(" · ")[0]}</span>
+                <strong>{formatPrice(featuredFragrance.price)}</strong>
+                <small className={featuredFragrance.stock <= featuredFragrance.reorderLevel ? "is-low-stock" : ""}>
+                  {featuredFragrance.stock === 0
+                    ? "Currently unavailable"
+                    : featuredFragrance.stock <= featuredFragrance.reorderLevel
+                      ? `Only ${featuredFragrance.stock} left`
+                      : "In stock"}
+                </small>
+              </div>
+            )}
+            <button
+              type="button"
+              className="button button-dark hero-add-button"
+              onClick={() => featuredFragrance && addToBag(featuredFragrance)}
+              disabled={!featuredFragrance || featuredFragrance.stock === 0}
+            >
+              {!featuredFragrance
+                ? catalogLoading
+                  ? "Loading collection…"
+                  : "Collection unavailable"
+                : featuredFragrance.stock === 0
+                  ? "Out of stock"
+                  : "Add to bag"}
+              {featuredFragrance?.stock > 0 && <ShoppingBag size={15} />}
+            </button>
+            <a className="hero-collection-link" href="#collection">
+              Explore the collection <ArrowRight size={14} />
             </a>
             <div className="hero-footnote">
-              <span className="hero-index">01 / 04</span>
+              <span className="hero-index">
+                {featuredFragrance
+                  ? `0${fragrances.findIndex((item) => item.id === featuredId) + 1} / ${String(fragrances.length).padStart(2, "0")}`
+                  : "00 / 00"}
+              </span>
               <span className="hero-line" />
               <span>SCENT, WITH INTENTION</span>
             </div>
           </div>
-          <div className="hero-art" aria-label="A perfume bottle in warm afternoon light">
+          <div
+            className={`hero-art ${featuredFragrance?.tone || "sand"}`}
+            role="img"
+            aria-label={
+              featuredFragrance
+                ? `${featuredFragrance.name}, Vélora eau de parfum`
+                : "Vélora perfume collection"
+            }
+          >
+            <div className="hero-art-orbit" />
             <div className="hero-art-wash" />
-            <BottleArt name="Santal Royale" tone="sand" large />
+            {featuredFragrance && (
+              <>
+                <BottleArt name={featuredFragrance.name} tone={featuredFragrance.tone} large />
+                <div className="hero-art-note">
+                  <span>AN ATELIER SIGNATURE</span>
+                  <strong>{featuredFragrance.name}</strong>
+                  <span>{featuredFragrance.family.toUpperCase()} · EAU DE PARFUM</span>
+                </div>
+              </>
+            )}
             <div className="hero-art-caption">
-              <span>01 — SIGNATURE</span>
-              <strong>Santal Royale</strong>
-              <span>CEDAR · AMBER · FIG</span>
+              <span>CRAFTED TO LINGER</span>
             </div>
-            <div className="hero-roundel">
-              <span>
-                EAU
-                <br />
-                DE
-                <br />
-                PARFUM
-              </span>
-            </div>
+            {featuredFragrance && (
+              <div className="hero-roundel">
+                <span>
+                  {featuredFragrance.size.split(" · ")[0].toUpperCase()}
+                  <br />
+                  VÉLORA
+                </span>
+              </div>
+            )}
           </div>
+          {fragrances.length > 0 && (
+          <aside className="hero-fragrance-rail" aria-label="Choose a featured fragrance">
+            <p className="eyebrow">THE EDIT</p>
+            <div className="hero-fragrance-options">
+              {fragrances.slice(0, 4).map((fragrance, index) => (
+                <button
+                  key={fragrance.id}
+                  type="button"
+                  className={`hero-fragrance-option ${featuredId === fragrance.id ? "is-selected" : ""}`}
+                  aria-pressed={featuredId === fragrance.id}
+                  onClick={() => setFeaturedId(fragrance.id)}
+                >
+                  <span className={`hero-mini-bottle ${fragrance.tone}`} aria-hidden="true">
+                    <BottleArt name={fragrance.name} tone={fragrance.tone} />
+                  </span>
+                  <span className="hero-option-copy">
+                    <small>0{index + 1} · {fragrance.family}</small>
+                    <strong>{fragrance.name}</strong>
+                    <span>{formatPrice(fragrance.price)}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+            <a className="hero-rail-link" href="#collection">
+              View all scents <ArrowRight size={13} />
+            </a>
+          </aside>
+          )}
           <a className="scroll-cue" href="#collection" aria-label="Scroll to collection">
             <ArrowDown size={15} />
           </a>
@@ -268,7 +558,14 @@ export default function App() {
           <span>MADE TO BE REMEMBERED</span>
         </section>
 
-        <section className="collection-section" id="collection">
+        <section
+          className="collection-section"
+          id="collection"
+          onFocusCapture={() => setCarouselFocused(true)}
+          onBlurCapture={(event) =>
+            setCarouselFocused(event.currentTarget.contains(event.relatedTarget))
+          }
+        >
           <div className="section-heading">
             <div>
               <p className="eyebrow">THE VÉLORA COLLECTION</p>
@@ -276,7 +573,54 @@ export default function App() {
                 Find your <em>almost indescribable.</em>
               </h2>
             </div>
-            <p className="section-aside">A study in feeling, bottled.</p>
+            <div className="collection-heading-actions">
+              <p className="section-aside">A study in feeling, bottled.</p>
+              <div
+                className="carousel-controls"
+                aria-label="Collection carousel controls"
+                onMouseEnter={() => setCarouselHovered(true)}
+                onMouseLeave={() => setCarouselHovered(false)}
+              >
+                <button
+                  type="button"
+                  className={`carousel-autoplay-button ${carouselAutoplayEnabled && !prefersReducedMotion ? "is-active" : ""}`}
+                  aria-label={
+                    prefersReducedMotion
+                      ? "Automatic carousel disabled by reduced-motion preference"
+                      : carouselAutoplayEnabled
+                        ? "Pause automatic carousel"
+                        : "Play automatic carousel"
+                  }
+                  aria-pressed={carouselAutoplayEnabled && !prefersReducedMotion}
+                  disabled={prefersReducedMotion}
+                  onClick={() => setCarouselAutoplayEnabled((enabled) => !enabled)}
+                >
+                  {carouselAutoplayEnabled && !prefersReducedMotion ? (
+                    <Pause size={14} />
+                  ) : (
+                    <Play size={14} />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  aria-label="Show previous fragrances"
+                  aria-controls="fragrance-carousel"
+                  disabled={!canScrollCarouselBack}
+                  onClick={() => moveProductCarousel(-1)}
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Show more fragrances"
+                  aria-controls="fragrance-carousel"
+                  disabled={!canScrollCarouselForward}
+                  onClick={() => moveProductCarousel(1)}
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </div>
+            </div>
           </div>
 
           <div className="collection-controls">
@@ -286,6 +630,7 @@ export default function App() {
                   key={item}
                   type="button"
                   className={family === item ? "family-tab active" : "family-tab"}
+                  aria-pressed={family === item}
                   onClick={() => setFamily(item)}
                 >
                   {item}
@@ -307,10 +652,33 @@ export default function App() {
             </label>
           </div>
 
-          {visibleFragrances.length ? (
-            <div className="product-grid">
+          {catalogLoading ? (
+            <div className="catalog-status" role="status">Loading the Vélora collection…</div>
+          ) : catalogError ? (
+            <div className="catalog-status catalog-status-error" role="alert">
+              <p>{catalogError}</p>
+              <button type="button" onClick={() => setCatalogReloadKey((key) => key + 1)}>
+                Try again
+              </button>
+            </div>
+          ) : visibleFragrances.length ? (
+            <div
+              className="product-carousel-track"
+              id="fragrance-carousel"
+              ref={productCarouselRef}
+              role="list"
+              aria-label="Fragrance collection"
+              aria-live="off"
+              onMouseEnter={() => setCarouselHovered(true)}
+              onMouseLeave={() => setCarouselHovered(false)}
+              onPointerDown={() => setCarouselPointerDown(true)}
+              onPointerUp={() => setCarouselPointerDown(false)}
+              onPointerCancel={() => setCarouselPointerDown(false)}
+              onPointerLeave={() => setCarouselPointerDown(false)}
+              onScroll={updateCarouselControls}
+            >
               {visibleFragrances.map((product, index) => (
-                <article className="product-card" key={product.id}>
+                <article className="product-card" key={product.id} role="listitem">
                   <div className={`product-image ${product.tone}`}>
                     <BottleArt name={product.name} tone={product.tone} />
                     {product.label && <span className="product-label">{product.label}</span>}
@@ -354,11 +722,13 @@ export default function App() {
                     <span className="product-price">{formatPrice(product.price)}</span>
                   </div>
                   <p className="product-size">{product.size}</p>
-                  <p className={`stock-note ${product.stock <= 3 ? "stock-note-low" : ""}`}>
+                  <p
+                    className={`stock-note ${product.stock <= product.reorderLevel ? "stock-note-low" : ""}`}
+                  >
                     <i />{" "}
                     {product.stock === 0
                       ? "Out of stock"
-                      : product.stock <= 3
+                      : product.stock <= product.reorderLevel
                         ? `Low stock · ${product.stock} left`
                         : "In stock"}
                   </p>
@@ -369,26 +739,21 @@ export default function App() {
           ) : (
             <div className="empty-search">
               <Search size={20} />
-              <p>No fragrances found for “{search}”.</p>
-              <button
-                type="button"
-                onClick={() => {
-                  setSearch("");
-                  setFamily("All fragrances");
-                }}
-              >
+              <p>
+                No fragrances match your current search and filters.
+              </p>
+              <button type="button" onClick={resetCollection}>
                 Clear filters
               </button>
             </div>
           )}
           <div className="catalog-link-wrap">
-            <span>{visibleFragrances.length} fragrances in this edit</span>
+            <span aria-live="polite" aria-atomic="true">
+              {visibleFragrances.length} {visibleFragrances.length === 1 ? "fragrance" : "fragrances"} in this collection
+            </span>
             <button
               type="button"
-              onClick={() => {
-                setSearch("");
-                setFamily("All fragrances");
-              }}
+              onClick={resetCollection}
             >
               View the full collection <ArrowRight size={15} />
             </button>
@@ -468,16 +833,24 @@ export default function App() {
             if (event.target === event.currentTarget) setBagOpen(false);
           }}
         >
-          <aside className="bag-drawer" aria-label="Shopping bag">
+          <aside
+            className="bag-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="bag-dialog-title"
+            tabIndex={-1}
+          >
             <div className="drawer-heading">
               <div>
                 <p className="eyebrow">YOUR SELECTION</p>
                 <h2>
-                  The fragrance bag <span>({bagCount})</span>
+                  <span id="bag-dialog-title">The fragrance bag</span> <span>({bagCount})</span>
                 </h2>
               </div>
               <button
+                type="button"
                 className="icon-button"
+                ref={bagCloseRef}
                 onClick={() => setBagOpen(false)}
                 aria-label="Close bag"
               >
@@ -498,6 +871,7 @@ export default function App() {
                         <strong>{formatPrice(item.price)}</strong>
                         <div className="quantity-control">
                           <button
+                            type="button"
                             onClick={() => changeQuantity(item.id, -1)}
                             aria-label={`Remove one ${item.name}`}
                           >
@@ -505,6 +879,7 @@ export default function App() {
                           </button>
                           <span>{item.quantity}</span>
                           <button
+                            type="button"
                             onClick={() => changeQuantity(item.id, 1)}
                             aria-label={`Add one ${item.name}`}
                             disabled={item.quantity >= item.stock}
@@ -519,18 +894,20 @@ export default function App() {
                 <div className="drawer-summary">
                   <div>
                     <span>Subtotal</span>
-                    <strong>{formatPrice(bagTotal)}</strong>
+                    <strong>{formatCents(bagTotalCents)}</strong>
                   </div>
                   <p>
-                    <Check size={14} /> Preview bag · quantities saved on this device
+                    <Check size={14} /> Cash on Delivery available at checkout
                   </p>
-                  <button
+                  <Link
                     className="button button-dark drawer-continue"
+                    to={user ? "/checkout" : "/login"}
+                    state={user ? undefined : { from: "/checkout" }}
                     onClick={() => setBagOpen(false)}
                   >
-                    Continue exploring <ArrowRight size={15} />
-                  </button>
-                  <small>Preview bag · Checkout will be available soon</small>
+                    {user ? "Proceed to checkout" : "Sign in to checkout"}
+                    <ArrowRight size={15} />
+                  </Link>
                 </div>
               </>
             ) : (
@@ -538,7 +915,7 @@ export default function App() {
                 <ShoppingBag size={26} strokeWidth={1.2} />
                 <h3>A little room for something lovely.</h3>
                 <p>Your bag is waiting for its first fragrance.</p>
-                <button className="text-link" onClick={() => setBagOpen(false)}>
+                <button type="button" className="text-link" onClick={() => setBagOpen(false)}>
                   Explore fragrances <ArrowRight size={15} />
                 </button>
               </div>
@@ -547,5 +924,17 @@ export default function App() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<StorefrontPage />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
+      <Route path="/checkout" element={<CheckoutPage />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }

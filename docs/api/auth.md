@@ -19,6 +19,12 @@ Creates a new customer account and automatically generates a linked `Customer` r
 }
 ```
 
+- `name` (string, required, 2–100 chars)
+- `email` (string, required, valid email)
+- `password` (string, required, min 8 chars)
+- `phone` (string, required, 7–30 chars)
+- `address` (string, optional, 5–500 chars when provided)
+
 ### Response `201 Created`
 
 ```json
@@ -78,7 +84,10 @@ Customer login endpoint. Strictly rejects non-CUSTOMER roles.
 
 ### Errors
 
-- `401 Unauthorized`: Generic message `"Invalid email or password"` (used for incorrect credentials or if a staff member attempts customer login).
+- `400 Bad Request` (`VALIDATION_ERROR`): Invalid request data (`details` array with `{ field, issue }`).
+- `401 Unauthorized`: Generic message `"Invalid email or password."` (used for incorrect credentials or if a staff member attempts customer login).
+- `403 Forbidden` (`ACCOUNT_DEACTIVATED`): `"This account has been deactivated."`
+- `429 Too Many Requests` (`RATE_LIMITED`): `"Too many login attempts. Please try again later."`
 
 ---
 

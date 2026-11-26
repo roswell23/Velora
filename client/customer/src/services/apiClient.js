@@ -16,12 +16,13 @@ async function request(method, path, body = null) {
   if (body) options.body = JSON.stringify(body);
 
   const res = await fetch(`${BASE_URL}${path}`, options);
-  const data = await res.json();
+  const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
     const err = new Error(data.error?.message || "Request failed.");
     err.code = data.error?.code;
     err.status = res.status;
+    err.details = data.error?.details;
     throw err;
   }
   return data;

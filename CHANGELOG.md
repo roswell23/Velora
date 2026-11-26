@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Customer login (`/login`) and registration (`/register`) pages in `client/customer` (`LoginPage.jsx`, `RegisterPage.jsx`, `AuthLayout.jsx`, `useAuth.jsx`) wired to `POST /api/auth/login`, `POST /api/auth/register`, and `GET /api/auth/me` using `localStorage` (`velora_token`).
+- Storefront header sign-in / signed-in state integration in `client/customer/src/App.jsx`.
+
 ## [0.2.0] - 2026-11-24
 
 ### Added

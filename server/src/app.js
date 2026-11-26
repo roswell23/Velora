@@ -5,6 +5,8 @@ import { env } from "./config/env.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import authRoutes from "./modules/auth/auth.routes.js";
 import usersRoutes from "./modules/users/users.routes.js";
+import productsRoutes from "./modules/products/products.routes.js";
+import myRoutes from "./modules/my/my.routes.js";
 
 const app = express();
 
@@ -33,7 +35,9 @@ app.get("/api/health", (_req, res) => {
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/users", usersRoutes);
-// TODO Phase 3 slices: customers, categories, products, orders, my, inventory, payments, finance
+app.use("/api/products", productsRoutes);
+app.use("/api/my", myRoutes);
+// TODO Phase 3 slices: customers, categories, orders, inventory, payments, finance
 
 // 404 handler
 app.use((_req, res) => {

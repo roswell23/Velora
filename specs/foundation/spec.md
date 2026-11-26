@@ -1,6 +1,6 @@
 # Spec: Foundation (Auth, Roles, Layout, Admin, Seed)
 
-Owner: Shared / Member 5 Status: Approved Version: 1.0
+Owner: Shared / Member 5 Status: Approved Version: 1.1
 
 ## 1. Purpose
 
@@ -55,9 +55,25 @@ Provide unified authentication (JWT, Argon2id), role-based access control (RBAC)
 ## 6. UI Pages and Behavior
 
 - **Customer Auth Pages (`client/customer`):**
-  - Sign In (`/login`): Clean luxury styling, email/password fields, "Forgot Password" link.
-  - Sign Up (`/register`): Fields for Name, Email, Password, Phone, Address.
-  - Forgot / Reset Password (`/forgot-password`, `/reset-password?token=...`).
+  - **Auth State & Token Convention:** Uses the existing `client/customer/src/services/apiClient.js` convention of storing the customer JWT in `localStorage` under `velora_token`. An `AuthProvider` / `useAuth` hook (`client/customer/src/hooks/useAuth.jsx`) exposes `user`, `loading`, `login`, `register`, and `logout`, hydrating `user` via `GET /api/auth/me` on mount when `velora_token` is present (clearing the token if invalid or if `role !== "CUSTOMER"`).
+  - **Sign In (`/login` — `LoginPage.jsx`):**
+    - Luxury editorial styling matching the VÉLORA storefront (`#f7f6f2` paper, `#292c27` ink, `#8d7950` gold accents, Playfair Display + DM Sans), responsive across mobile and desktop.
+    - Fields: `email` (required, valid email), `password` (required, with accessible show/hide toggle).
+    - Client-side validation with accessible field errors (`aria-invalid`, `aria-describedby`) and form-level error alert (`role="alert"`), keeping backend Zod validation authoritative.
+    - Disables submit button and shows loading state while `POST /api/auth/login` is in flight to prevent duplicate submissions.
+    - Handles `400` (`VALIDATION_ERROR`), `401` (`INVALID_CREDENTIALS`), `403` (`ACCOUNT_DEACTIVATED`), `429` (`RATE_LIMITED`), and network errors.
+    - On success: stores `velora_token`, updates auth context, shows confirmation status (`role="status"`), and navigates to `/`.
+    - Links to `/register` and back to `/`.
+  - **Sign Up (`/register` — `RegisterPage.jsx`):**
+    - Matching VÉLORA luxury editorial styling and responsive layout.
+    - Fields aligned with `registerSchema`: `name` (required, 2–100 chars), `email` (required, valid email), `password` (required, min 8 chars, show/hide toggle), `phone` (required, 7–30 chars), `address` (optional; 5–500 chars if provided, omitted from payload when blank).
+    - Client-side validation for usability; backend Zod validation remains authoritative (mapping `error.details` field issues when returned).
+    - Disables submit button and shows loading state while `POST /api/auth/register` is in flight to prevent duplicate submissions.
+    - Handles `400` (`VALIDATION_ERROR`), `409` (`EMAIL_EXISTS`), and network errors.
+    - On success: stores `velora_token`, updates auth context, shows confirmation status (`role="status"`), and navigates to `/`.
+    - Links to `/login` and back to `/`.
+  - **Storefront Header Integration:** Shows "Sign in" link (`/login`) when unauthenticated, and customer name + "Sign out" action when authenticated.
+  - **Future Scope (separate tasks):** Forgot / Reset Password (`/forgot-password`, `/reset-password?token=...`).
 - **ERP Staff Auth Pages (`client/admin`):**
   - Staff Login (`/login`): Dark luxury layout, role guard notice, error toast on bad credentials.
   - Forgot / Reset Password (`/forgot-password`, `/reset-password?token=...`).
