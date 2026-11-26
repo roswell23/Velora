@@ -1,74 +1,32 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, Navigate, Route, Routes } from "react-router-dom";
+import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import {
   ArrowDown,
   ArrowRight,
-  Check,
-  ChevronLeft,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
-  Heart,
-  Menu,
-  Minus,
   Pause,
-  Plus,
   Play,
   Search,
   ShoppingBag,
-  Sparkles,
-  User,
   X,
 } from "lucide-react";
-import { useAuth } from "./hooks/useAuth.jsx";
+import BottleArt, { mapProduct } from "./components/BottleArt.jsx";
+import ProductCard from "./components/ProductCard.jsx";
+import StorefrontLayout from "./components/StorefrontLayout.jsx";
+import { BagProvider, useBag } from "./hooks/useBag.jsx";
 import LoginPage from "./features/auth/LoginPage.jsx";
 import RegisterPage from "./features/auth/RegisterPage.jsx";
+import CatalogPage from "./features/catalog/CatalogPage.jsx";
+import ProductDetailPage from "./features/catalog/ProductDetailPage.jsx";
 import CheckoutPage from "./features/checkout/CheckoutPage.jsx";
 import { api } from "./services/apiClient.js";
-import { formatCents, formatPrice, toCents } from "./utils/formatMoney.js";
-
-const familyTone = { Woody: "sand", Floral: "rose", Oriental: "amber", Citrus: "cream" };
-
-function mapProduct(product, index) {
-  return {
-    id: product.id,
-    name: product.name,
-    brand: product.brand,
-    family: product.category?.name || "Fragrance",
-    size: `${product.size} · Eau de parfum`,
-    price: product.unitPrice,
-    stock: product.stock,
-    reorderLevel: product.reorderLevel,
-    imageUrl: product.imageUrl,
-    label: ["SIGNATURE", "ATELIER EDIT", "NEW ARRIVAL"][index] || "",
-    tone: familyTone[product.category?.name] || "sand",
-  };
-}
-
-function BottleArt({ name, tone, large = false }) {
-  return (
-    <div
-      className={`bottle-art ${tone} ${large ? "bottle-large" : ""}`}
-      role="img"
-      aria-label={`${name} Vélora perfume bottle illustration`}
-    >
-      <div className="bottle-light" />
-      <div className="bottle-shadow" />
-      <div className="bottle-cap" />
-      <div className="bottle-neck" />
-      <div className="bottle-vessel">
-        <div className="bottle-label">
-          <span>VÉLORA</span>
-          <i />
-          <small>{name.toUpperCase()}</small>
-        </div>
-      </div>
-      <span className="bottle-caption">EAU DE PARFUM · PARIS</span>
-    </div>
-  );
-}
+import { formatPrice } from "./utils/formatMoney.js";
 
 function StorefrontPage() {
-  const { user, loading: authLoading, logout } = useAuth();
+  const { addToBag, syncBagWithProducts } = useBag();
+  const location = useLocation();
   const [fragrances, setFragrances] = useState([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState("");
@@ -79,6 +37,8 @@ function StorefrontPage() {
   const [featuredId, setFeaturedId] = useState(null);
   const [canScrollCarouselBack, setCanScrollCarouselBack] = useState(false);
   const [canScrollCarouselForward, setCanScrollCarouselForward] = useState(false);
+  const [carouselHasOverflow, setCarouselHasOverflow] = useState(false);
+  const [carouselProgress, setCarouselProgress] = useState(0);
   const [carouselAutoplayEnabled, setCarouselAutoplayEnabled] = useState(true);
   const [carouselHovered, setCarouselHovered] = useState(false);
   const [carouselFocused, setCarouselFocused] = useState(false);
@@ -88,19 +48,14 @@ function StorefrontPage() {
     window.matchMedia("(prefers-reduced-motion: reduce)").matches
   );
   const productCarouselRef = useRef(null);
-  const [bag, setBag] = useState(() => {
-    try {
-      const storedBag = JSON.parse(localStorage.getItem("velora_boutique_bag") || "[]");
-      return Array.isArray(storedBag) ? storedBag : [];
-    } catch {
-      return [];
+
+  useEffect(() => {
+    if (!location.hash) return;
+    const target = document.querySelector(location.hash);
+    if (target) {
+      target.scrollIntoView({ behavior: prefersReducedMotion ? "auto" : "smooth" });
     }
-  });
-  const [bagOpen, setBagOpen] = useState(false);
-  const bagTriggerRef = useRef(null);
-  const bagCloseRef = useRef(null);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [saved, setSaved] = useState([]);
+  }, [location.hash, prefersReducedMotion]);
 
   const visibleFragrances = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -113,7 +68,9 @@ function StorefrontPage() {
     if (sort === "price-low") return filtered.sort((a, b) => Number(a.price) - Number(b.price));
     if (sort === "price-high") return filtered.sort((a, b) => Number(b.price) - Number(a.price));
     return filtered;
-  }, [family, search, sort]);
+  }, [fragrances, family, search, sort]);
+
+  const isFiltered = family !== "All fragrances" || search.trim() !== "" || sort !== "curated";
   const families = useMemo(
     () => ["All fragrances", ...new Set(fragrances.map((item) => item.family))],
     [fragrances]
@@ -132,6 +89,7 @@ function StorefrontPage() {
         const products = response.data.map(mapProduct);
         setFragrances(products);
         setFeaturedId(products[0]?.id ?? null);
+        syncBagWithProducts(products);
       })
       .catch((error) => {
         if (!ignore) setCatalogError(error.message || "Could not load the fragrance collection.");
@@ -140,32 +98,36 @@ function StorefrontPage() {
         if (!ignore) setCatalogLoading(false);
       });
 
+    const handleFocusRefresh = () => {
+      if (document.visibilityState === "visible") {
+        setCatalogReloadKey((k) => k + 1);
+      }
+    };
+    window.addEventListener("focus", handleFocusRefresh);
+    document.addEventListener("visibilitychange", handleFocusRefresh);
+
     return () => {
       ignore = true;
+      window.removeEventListener("focus", handleFocusRefresh);
+      document.removeEventListener("visibilitychange", handleFocusRefresh);
     };
-  }, [catalogReloadKey]);
-
-  useEffect(() => {
-    if (!fragrances.length) return;
-    setBag((currentBag) =>
-      currentBag.flatMap((item) => {
-        const product = fragrances.find((candidate) => candidate.name === item.name);
-        if (!product || product.stock <= 0) return [];
-        return [{ ...product, quantity: Math.min(item.quantity, product.stock) }];
-      })
-    );
-  }, [fragrances]);
+  }, [catalogReloadKey, syncBagWithProducts]);
 
   const updateCarouselControls = useCallback(() => {
     const carousel = productCarouselRef.current;
     if (!carousel) {
       setCanScrollCarouselBack(false);
       setCanScrollCarouselForward(false);
+      setCarouselHasOverflow(false);
+      setCarouselProgress(0);
       return;
     }
+    const maximumScroll = Math.max(0, carousel.scrollWidth - carousel.clientWidth);
     setCanScrollCarouselBack(carousel.scrollLeft > 2);
-    setCanScrollCarouselForward(
-      carousel.scrollLeft < carousel.scrollWidth - carousel.clientWidth - 2
+    setCanScrollCarouselForward(carousel.scrollLeft < maximumScroll - 2);
+    setCarouselHasOverflow(maximumScroll > 2);
+    setCarouselProgress(
+      maximumScroll > 2 ? Math.min(1, Math.max(0, carousel.scrollLeft / maximumScroll)) : 0
     );
   }, []);
 
@@ -180,10 +142,6 @@ function StorefrontPage() {
       : "smooth";
     carousel.scrollBy({ left: direction * step, behavior });
   }
-
-  useEffect(() => {
-    localStorage.setItem("velora_boutique_bag", JSON.stringify(bag));
-  }, [bag]);
 
   useEffect(() => {
     const carousel = productCarouselRef.current;
@@ -258,82 +216,6 @@ function StorefrontPage() {
     visibleFragrances,
   ]);
 
-  useEffect(() => {
-    if (!bagOpen) return undefined;
-
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    bagCloseRef.current?.focus();
-
-    function handleDialogKeys(event) {
-      if (event.key === "Escape") {
-        setBagOpen(false);
-        return;
-      }
-      if (event.key !== "Tab") return;
-
-      const focusable = document.querySelectorAll(
-        ".bag-drawer a[href], .bag-drawer button:not(:disabled), .bag-drawer [tabindex]:not([tabindex='-1'])"
-      );
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (!first || !last) return;
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    }
-
-    document.addEventListener("keydown", handleDialogKeys);
-    return () => {
-      document.removeEventListener("keydown", handleDialogKeys);
-      document.body.style.overflow = previousOverflow;
-      bagTriggerRef.current?.focus();
-    };
-  }, [bagOpen]);
-
-  const bagCount = bag.reduce((total, item) => total + item.quantity, 0);
-  const bagTotalCents = bag.reduce(
-    (total, item) => total + toCents(item.price) * BigInt(item.quantity),
-    0n
-  );
-
-  function addToBag(fragrance) {
-    setBag((current) => {
-      const existing = current.find((item) => item.id === fragrance.id);
-      if (existing) {
-        return current.map((item) =>
-          item.id === fragrance.id
-            ? { ...item, quantity: Math.min(item.stock, item.quantity + 1) }
-            : item
-        );
-      }
-      return [...current, { ...fragrance, quantity: 1 }];
-    });
-    setBagOpen(true);
-  }
-
-  function changeQuantity(id, change) {
-    setBag((current) =>
-      current
-        .map((item) =>
-          item.id === id
-            ? { ...item, quantity: Math.min(item.stock, item.quantity + change) }
-            : item
-        )
-        .filter((item) => item.quantity > 0)
-    );
-  }
-
-  function toggleSaved(id) {
-    setSaved((current) =>
-      current.includes(id) ? current.filter((savedId) => savedId !== id) : [...current, id]
-    );
-  }
-
   function resetCollection() {
     setSearch("");
     setFamily("All fragrances");
@@ -341,82 +223,7 @@ function StorefrontPage() {
   }
 
   return (
-    <div className="storefront">
-      <div className="announcement-bar">
-        <Sparkles size={13} strokeWidth={1.5} />
-        <span>A first look at the Vélora fragrance collection</span>
-        <ArrowRight size={13} strokeWidth={1.5} />
-      </div>
-
-      <header className="store-header">
-        <button
-          type="button"
-          className="icon-button mobile-menu-button"
-          aria-label={menuOpen ? "Close navigation" : "Open navigation"}
-          aria-expanded={menuOpen}
-          aria-controls="store-navigation"
-          onClick={() => setMenuOpen((open) => !open)}
-        >
-          {menuOpen ? <X size={20} /> : <Menu size={20} />}
-        </button>
-        <a className="wordmark" href="#top" aria-label="Vélora home">
-          VÉLORA<span>®</span>
-        </a>
-        <nav
-          id="store-navigation"
-          className={`store-nav ${menuOpen ? "is-open" : ""}`}
-          aria-label="Main navigation"
-        >
-          <a href="#collection" onClick={() => setMenuOpen(false)}>
-            Fragrances
-          </a>
-          <a href="#story" onClick={() => setMenuOpen(false)}>
-            Our story
-          </a>
-          <a href="#ritual" onClick={() => setMenuOpen(false)}>
-            The Vélora ritual
-          </a>
-        </nav>
-        <div className="header-actions">
-          <label className="header-search" aria-label="Search fragrances">
-            <Search size={16} />
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search"
-            />
-          </label>
-          {!authLoading &&
-            (user ? (
-              <div className="account-actions">
-                <span className="account-greeting" title={user.email}>
-                  <User size={15} strokeWidth={1.5} />
-                  <span className="account-name">{user.name.split(" ")[0]}</span>
-                </span>
-                <button type="button" className="auth-header-action" onClick={logout}>
-                  Sign out
-                </button>
-              </div>
-            ) : (
-              <Link className="auth-header-action" to="/login">
-                <User size={15} strokeWidth={1.5} />
-                <span>Sign in</span>
-              </Link>
-            ))}
-          <button
-            type="button"
-            className="bag-trigger"
-            ref={bagTriggerRef}
-            onClick={() => setBagOpen(true)}
-            aria-label={`Open shopping bag, ${bagCount} items`}
-          >
-            <ShoppingBag size={18} strokeWidth={1.5} />
-            <span className="bag-label">Bag</span>
-            <span className="bag-count">{bagCount}</span>
-          </button>
-        </div>
-      </header>
-
+    <StorefrontLayout searchValue={search} onSearchChange={setSearch}>
       <main id="top">
         <section className="hero-section">
           <div className="hero-copy">
@@ -433,8 +240,9 @@ function StorefrontPage() {
             <p className="hero-description">
               {featuredFragrance ? (
                 <>
-                  Meet <strong>{featuredFragrance.name}</strong>, a {featuredFragrance.family.toLowerCase()} fragrance
-                  made for the moments that become memories.
+                  Meet <strong>{featuredFragrance.name}</strong>, a{" "}
+                  {featuredFragrance.family.toLowerCase()} fragrance made for the moments that become
+                  memories.
                 </>
               ) : catalogLoading ? (
                 "Preparing the Vélora collection…"
@@ -444,9 +252,15 @@ function StorefrontPage() {
             </p>
             {featuredFragrance && (
               <div className="hero-product-price">
-                <span>{featuredFragrance.family} · {featuredFragrance.size.split(" · ")[0]}</span>
+                <span>
+                  {featuredFragrance.family} · {featuredFragrance.volume}
+                </span>
                 <strong>{formatPrice(featuredFragrance.price)}</strong>
-                <small className={featuredFragrance.stock <= featuredFragrance.reorderLevel ? "is-low-stock" : ""}>
+                <small
+                  className={
+                    featuredFragrance.stock <= featuredFragrance.reorderLevel ? "is-low-stock" : ""
+                  }
+                >
                   {featuredFragrance.stock === 0
                     ? "Currently unavailable"
                     : featuredFragrance.stock <= featuredFragrance.reorderLevel
@@ -470,9 +284,9 @@ function StorefrontPage() {
                   : "Add to bag"}
               {featuredFragrance?.stock > 0 && <ShoppingBag size={15} />}
             </button>
-            <a className="hero-collection-link" href="#collection">
+            <Link className="hero-collection-link" to="/catalog">
               Explore the collection <ArrowRight size={14} />
-            </a>
+            </Link>
             <div className="hero-footnote">
               <span className="hero-index">
                 {featuredFragrance
@@ -497,11 +311,11 @@ function StorefrontPage() {
             {featuredFragrance && (
               <>
                 <BottleArt name={featuredFragrance.name} tone={featuredFragrance.tone} large />
-                <div className="hero-art-note">
+                <Link className="hero-art-note" to={`/product/${featuredFragrance.id}`}>
                   <span>AN ATELIER SIGNATURE</span>
                   <strong>{featuredFragrance.name}</strong>
-                  <span>{featuredFragrance.family.toUpperCase()} · EAU DE PARFUM</span>
-                </div>
+                  <span>{featuredFragrance.family.toUpperCase()} · VIEW NOTES →</span>
+                </Link>
               </>
             )}
             <div className="hero-art-caption">
@@ -510,7 +324,7 @@ function StorefrontPage() {
             {featuredFragrance && (
               <div className="hero-roundel">
                 <span>
-                  {featuredFragrance.size.split(" · ")[0].toUpperCase()}
+                  {featuredFragrance.volume.toUpperCase()}
                   <br />
                   VÉLORA
                 </span>
@@ -518,32 +332,34 @@ function StorefrontPage() {
             )}
           </div>
           {fragrances.length > 0 && (
-          <aside className="hero-fragrance-rail" aria-label="Choose a featured fragrance">
-            <p className="eyebrow">THE EDIT</p>
-            <div className="hero-fragrance-options">
-              {fragrances.slice(0, 4).map((fragrance, index) => (
-                <button
-                  key={fragrance.id}
-                  type="button"
-                  className={`hero-fragrance-option ${featuredId === fragrance.id ? "is-selected" : ""}`}
-                  aria-pressed={featuredId === fragrance.id}
-                  onClick={() => setFeaturedId(fragrance.id)}
-                >
-                  <span className={`hero-mini-bottle ${fragrance.tone}`} aria-hidden="true">
-                    <BottleArt name={fragrance.name} tone={fragrance.tone} />
-                  </span>
-                  <span className="hero-option-copy">
-                    <small>0{index + 1} · {fragrance.family}</small>
-                    <strong>{fragrance.name}</strong>
-                    <span>{formatPrice(fragrance.price)}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
-            <a className="hero-rail-link" href="#collection">
-              View all scents <ArrowRight size={13} />
-            </a>
-          </aside>
+            <aside className="hero-fragrance-rail" aria-label="Choose a featured fragrance">
+              <p className="eyebrow">THE EDIT</p>
+              <div className="hero-fragrance-options">
+                {fragrances.slice(0, 4).map((fragrance, index) => (
+                  <button
+                    key={fragrance.id}
+                    type="button"
+                    className={`hero-fragrance-option ${featuredId === fragrance.id ? "is-selected" : ""}`}
+                    aria-pressed={featuredId === fragrance.id}
+                    onClick={() => setFeaturedId(fragrance.id)}
+                  >
+                    <span className={`hero-mini-bottle ${fragrance.tone}`} aria-hidden="true">
+                      <BottleArt name={fragrance.name} tone={fragrance.tone} />
+                    </span>
+                    <span className="hero-option-copy">
+                      <small>
+                        0{index + 1} · {fragrance.family}
+                      </small>
+                      <strong>{fragrance.name}</strong>
+                      <span>{formatPrice(fragrance.price)}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <Link className="hero-rail-link" to="/catalog">
+                View all scents <ArrowRight size={13} />
+              </Link>
+            </aside>
           )}
           <a className="scroll-cue" href="#collection" aria-label="Scroll to collection">
             <ArrowDown size={15} />
@@ -637,23 +453,38 @@ function StorefrontPage() {
                 </button>
               ))}
             </div>
-            <label className="sort-select-wrap">
-              <span className="sr-only">Sort fragrances</span>
-              <select
-                className="sort-select"
-                value={sort}
-                onChange={(event) => setSort(event.target.value)}
-              >
-                <option value="curated">Curated edit</option>
-                <option value="price-low">Price: low to high</option>
-                <option value="price-high">Price: high to low</option>
-              </select>
-              <ChevronDown size={14} />
-            </label>
+            <div className="collection-sort-group">
+              {search.trim() && (
+                <button
+                  type="button"
+                  className="active-search-pill"
+                  onClick={() => setSearch("")}
+                  aria-label={`Clear search "${search.trim()}"`}
+                >
+                  <span>“{search.trim()}”</span>
+                  <X size={12} aria-hidden="true" />
+                </button>
+              )}
+              <label className="sort-select-wrap">
+                <span className="sr-only">Sort fragrances</span>
+                <select
+                  className="sort-select"
+                  value={sort}
+                  onChange={(event) => setSort(event.target.value)}
+                >
+                  <option value="curated">Curated edit</option>
+                  <option value="price-low">Price: low to high</option>
+                  <option value="price-high">Price: high to low</option>
+                </select>
+                <ChevronDown size={14} aria-hidden="true" />
+              </label>
+            </div>
           </div>
 
           {catalogLoading ? (
-            <div className="catalog-status" role="status">Loading the Vélora collection…</div>
+            <div className="catalog-status" role="status">
+              Loading the Vélora collection…
+            </div>
           ) : catalogError ? (
             <div className="catalog-status catalog-status-error" role="alert">
               <p>{catalogError}</p>
@@ -662,101 +493,58 @@ function StorefrontPage() {
               </button>
             </div>
           ) : visibleFragrances.length ? (
-            <div
-              className="product-carousel-track"
-              id="fragrance-carousel"
-              ref={productCarouselRef}
-              role="list"
-              aria-label="Fragrance collection"
-              aria-live="off"
-              onMouseEnter={() => setCarouselHovered(true)}
-              onMouseLeave={() => setCarouselHovered(false)}
-              onPointerDown={() => setCarouselPointerDown(true)}
-              onPointerUp={() => setCarouselPointerDown(false)}
-              onPointerCancel={() => setCarouselPointerDown(false)}
-              onPointerLeave={() => setCarouselPointerDown(false)}
-              onScroll={updateCarouselControls}
-            >
-              {visibleFragrances.map((product, index) => (
-                <article className="product-card" key={product.id} role="listitem">
-                  <div className={`product-image ${product.tone}`}>
-                    <BottleArt name={product.name} tone={product.tone} />
-                    {product.label && <span className="product-label">{product.label}</span>}
-                    <button
-                      type="button"
-                      className={`save-button ${saved.includes(product.id) ? "saved" : ""}`}
-                      onClick={() => toggleSaved(product.id)}
-                      aria-label={
-                        saved.includes(product.id)
-                          ? `Remove ${product.name} from saved`
-                          : `Save ${product.name}`
-                      }
-                    >
-                      <Heart
-                        size={16}
-                        fill={saved.includes(product.id) ? "currentColor" : "none"}
-                      />
-                    </button>
-                    <button
-                      type="button"
-                      className={`quick-add ${product.stock === 0 ? "disabled" : ""}`}
-                      disabled={product.stock === 0}
-                      onClick={() => addToBag(product)}
-                    >
-                      {product.stock === 0 ? (
-                        "Out of stock"
-                      ) : (
-                        <>
-                          <Plus size={15} /> Add to bag
-                        </>
-                      )}
-                    </button>
-                  </div>
-                  <div className="product-meta">
-                    <div>
-                      <p className="product-family">
-                        {product.family} · {product.size.split(" · ")[0]}
-                      </p>
-                      <h3>{product.name}</h3>
-                    </div>
-                    <span className="product-price">{formatPrice(product.price)}</span>
-                  </div>
-                  <p className="product-size">{product.size}</p>
-                  <p
-                    className={`stock-note ${product.stock <= product.reorderLevel ? "stock-note-low" : ""}`}
-                  >
-                    <i />{" "}
-                    {product.stock === 0
-                      ? "Out of stock"
-                      : product.stock <= product.reorderLevel
-                        ? `Low stock · ${product.stock} left`
-                        : "In stock"}
-                  </p>
-                  <span className="product-number">0{index + 1}</span>
-                </article>
-              ))}
-            </div>
+            <>
+              <div
+                className="product-carousel-track"
+                id="fragrance-carousel"
+                ref={productCarouselRef}
+                role="list"
+                aria-label="Fragrance collection"
+                aria-live="off"
+                onMouseEnter={() => setCarouselHovered(true)}
+                onMouseLeave={() => setCarouselHovered(false)}
+                onPointerDown={() => setCarouselPointerDown(true)}
+                onPointerUp={() => setCarouselPointerDown(false)}
+                onPointerCancel={() => setCarouselPointerDown(false)}
+                onPointerLeave={() => setCarouselPointerDown(false)}
+                onScroll={updateCarouselControls}
+              >
+                {visibleFragrances.map((product, index) => (
+                  <ProductCard key={product.id} product={product} index={index} />
+                ))}
+              </div>
+              {carouselHasOverflow && (
+                <div className="carousel-progress" aria-hidden="true">
+                  <span style={{ left: `${carouselProgress * 72}%` }} />
+                </div>
+              )}
+            </>
           ) : (
             <div className="empty-search">
               <Search size={20} />
-              <p>
-                No fragrances match your current search and filters.
-              </p>
+              <p>No fragrances match your current search and filters.</p>
               <button type="button" onClick={resetCollection}>
                 Clear filters
               </button>
             </div>
           )}
           <div className="catalog-link-wrap">
-            <span aria-live="polite" aria-atomic="true">
-              {visibleFragrances.length} {visibleFragrances.length === 1 ? "fragrance" : "fragrances"} in this collection
-            </span>
-            <button
-              type="button"
-              onClick={resetCollection}
-            >
-              View the full collection <ArrowRight size={15} />
-            </button>
+            <div className="catalog-summary">
+              <span aria-live="polite" aria-atomic="true">
+                {visibleFragrances.length}{" "}
+                {visibleFragrances.length === 1 ? "fragrance" : "fragrances"} in this collection
+                {isFiltered ? ` (of ${fragrances.length})` : ""}
+              </span>
+              {isFiltered && (
+                <button type="button" className="catalog-reset-link" onClick={resetCollection}>
+                  Clear filters
+                </button>
+              )}
+            </div>
+            <Link className="collection-footer-cta" to="/catalog">
+              <span>Browse full fragrance catalog</span>
+              <ArrowRight size={15} aria-hidden="true" />
+            </Link>
           </div>
         </section>
 
@@ -812,129 +600,22 @@ function StorefrontPage() {
           </div>
         </section>
       </main>
-
-      <footer className="store-footer">
-        <a className="wordmark footer-mark" href="#top">
-          VÉLORA<span>®</span>
-        </a>
-        <p>The essence of elegance.</p>
-        <div>
-          <a href="#story">Our story</a>
-          <a href="#collection">Fragrances</a>
-          <a href="mailto:hello@velora.example">Contact</a>
-        </div>
-        <small>© 2026 VÉLORA. A study in scent.</small>
-      </footer>
-
-      {bagOpen && (
-        <div
-          className="drawer-backdrop"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setBagOpen(false);
-          }}
-        >
-          <aside
-            className="bag-drawer"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="bag-dialog-title"
-            tabIndex={-1}
-          >
-            <div className="drawer-heading">
-              <div>
-                <p className="eyebrow">YOUR SELECTION</p>
-                <h2>
-                  <span id="bag-dialog-title">The fragrance bag</span> <span>({bagCount})</span>
-                </h2>
-              </div>
-              <button
-                type="button"
-                className="icon-button"
-                ref={bagCloseRef}
-                onClick={() => setBagOpen(false)}
-                aria-label="Close bag"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            {bag.length ? (
-              <>
-                <div className="drawer-items">
-                  {bag.map((item) => (
-                    <div className="drawer-item" key={item.id}>
-                      <BottleArt name={item.name} tone={item.tone} />
-                      <div className="drawer-item-copy">
-                        <span>
-                          {item.family} · {item.size.split(" · ")[0]}
-                        </span>
-                        <h3>{item.name}</h3>
-                        <strong>{formatPrice(item.price)}</strong>
-                        <div className="quantity-control">
-                          <button
-                            type="button"
-                            onClick={() => changeQuantity(item.id, -1)}
-                            aria-label={`Remove one ${item.name}`}
-                          >
-                            <Minus size={13} />
-                          </button>
-                          <span>{item.quantity}</span>
-                          <button
-                            type="button"
-                            onClick={() => changeQuantity(item.id, 1)}
-                            aria-label={`Add one ${item.name}`}
-                            disabled={item.quantity >= item.stock}
-                          >
-                            <Plus size={13} />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="drawer-summary">
-                  <div>
-                    <span>Subtotal</span>
-                    <strong>{formatCents(bagTotalCents)}</strong>
-                  </div>
-                  <p>
-                    <Check size={14} /> Cash on Delivery available at checkout
-                  </p>
-                  <Link
-                    className="button button-dark drawer-continue"
-                    to={user ? "/checkout" : "/login"}
-                    state={user ? undefined : { from: "/checkout" }}
-                    onClick={() => setBagOpen(false)}
-                  >
-                    {user ? "Proceed to checkout" : "Sign in to checkout"}
-                    <ArrowRight size={15} />
-                  </Link>
-                </div>
-              </>
-            ) : (
-              <div className="empty-bag">
-                <ShoppingBag size={26} strokeWidth={1.2} />
-                <h3>A little room for something lovely.</h3>
-                <p>Your bag is waiting for its first fragrance.</p>
-                <button type="button" className="text-link" onClick={() => setBagOpen(false)}>
-                  Explore fragrances <ArrowRight size={15} />
-                </button>
-              </div>
-            )}
-          </aside>
-        </div>
-      )}
-    </div>
+    </StorefrontLayout>
   );
 }
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<StorefrontPage />} />
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
-      <Route path="/checkout" element={<CheckoutPage />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <BagProvider>
+      <Routes>
+        <Route path="/" element={<StorefrontPage />} />
+        <Route path="/catalog" element={<CatalogPage />} />
+        <Route path="/product/:id" element={<ProductDetailPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/checkout" element={<CheckoutPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BagProvider>
   );
 }

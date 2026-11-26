@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { ArrowLeft, ArrowRight, CheckCircle2, ShieldCheck } from "lucide-react";
 import { useAuth } from "../../hooks/useAuth.jsx";
+import { useBag } from "../../hooks/useBag.jsx";
 import { api } from "../../services/apiClient.js";
 import { formatCents, formatPrice, toCents } from "../../utils/formatMoney.js";
 
@@ -18,6 +19,7 @@ function readBag() {
 
 export default function CheckoutPage() {
   const { user, loading: authLoading } = useAuth();
+  const { clearBag } = useBag();
   const [bag, setBag] = useState(readBag);
   const [form, setForm] = useState({ phone: "", deliveryAddress: "" });
   const [profileLoading, setProfileLoading] = useState(true);
@@ -94,7 +96,7 @@ export default function CheckoutPage() {
       });
       setOrder(response.data);
       setBag([]);
-      localStorage.removeItem(BAG_KEY);
+      clearBag();
     } catch (error) {
       setFormError(error.message || "We couldn't place your order. Please try again.");
     } finally {

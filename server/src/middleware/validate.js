@@ -40,3 +40,22 @@ export function validateQuery(schema) {
     next();
   };
 }
+
+/**
+ * Zod route param validation middleware factory.
+ * @param {import("zod").ZodSchema} schema
+ */
+export function validateParams(schema) {
+  return (req, res, next) => {
+    const result = schema.safeParse(req.params);
+    if (!result.success) {
+      const details = result.error.errors.map((e) => ({
+        field: e.path.join("."),
+        issue: e.message,
+      }));
+      return sendError(res, 400, "VALIDATION_ERROR", "Invalid route parameters.", details);
+    }
+    req.params = result.data;
+    next();
+  };
+}

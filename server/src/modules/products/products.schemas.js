@@ -25,9 +25,13 @@ export const updateProductSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
+export const productIdParamSchema = z.object({
+  id: z.coerce.number().int().positive(),
+});
+
 export const productQuerySchema = z.object({
   search: z.string().optional(),
-  categoryId: z.string().optional(),
+  categoryId: z.coerce.number().int().positive().optional(),
   minPrice: z.coerce.number().nonnegative().optional(),
   maxPrice: z.coerce.number().nonnegative().optional(),
   sort: z.enum(['price_asc', 'price_desc', 'newest']).optional(),

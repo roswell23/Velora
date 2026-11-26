@@ -4,18 +4,14 @@ import { AuthProvider } from "./hooks/useAuth.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
 import AppLayout from "./layouts/AppLayout.jsx";
 import StaffLoginPage from "./features/auth/StaffLoginPage.jsx";
+import DashboardOverview from "./features/admin/DashboardOverview.jsx";
 import DepartmentDashboard from "./features/admin/DepartmentDashboard.jsx";
 import { useAuth } from "./hooks/useAuth.jsx";
 
 function RoleLanding() {
   const { user } = useAuth();
-  const routeByRole = {
-    ADMIN: "/sales",
-    SALES: "/sales",
-    INVENTORY: "/inventory",
-    FINANCE: "/finance",
-  };
-  return <Navigate to={routeByRole[user?.role] || "/login"} replace />;
+  if (!user) return <Navigate to="/login" replace />;
+  return <Navigate to="/dashboard" replace />;
 }
 
 function UnauthorizedPage() {
@@ -50,6 +46,14 @@ export default function App() {
           >
             <Route index element={<RoleLanding />} />
             <Route
+              path="dashboard/*"
+              element={
+                <ProtectedRoute allowedRoles={["ADMIN", "SALES", "INVENTORY", "FINANCE"]}>
+                  <DashboardOverview />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="sales/*"
               element={
                 <ProtectedRoute allowedRoles={["SALES", "ADMIN"]}>
@@ -78,6 +82,14 @@ export default function App() {
               element={
                 <ProtectedRoute allowedRoles={["ADMIN"]}>
                   <DepartmentDashboard department="admin" />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="catalog/*"
+              element={
+                <ProtectedRoute allowedRoles={["SALES", "INVENTORY", "FINANCE", "ADMIN"]}>
+                  <DepartmentDashboard department="catalog" />
                 </ProtectedRoute>
               }
             />

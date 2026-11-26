@@ -5,7 +5,11 @@ import { env } from "./config/env.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import authRoutes from "./modules/auth/auth.routes.js";
 import usersRoutes from "./modules/users/users.routes.js";
+import categoriesRoutes from "./modules/categories/categories.routes.js";
 import productsRoutes from "./modules/products/products.routes.js";
+import customersRoutes from "./modules/customers/customers.routes.js";
+import ordersRoutes from "./modules/orders/orders.routes.js";
+import inventoryRoutes from "./modules/inventory/inventory.routes.js";
 import myRoutes from "./modules/my/my.routes.js";
 
 const app = express();
@@ -35,7 +39,11 @@ app.get("/api/health", (_req, res) => {
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/users", usersRoutes);
+app.use("/api/categories", categoriesRoutes);
 app.use("/api/products", productsRoutes);
+app.use("/api/customers", customersRoutes);
+app.use("/api/orders", ordersRoutes);
+app.use("/api/inventory", inventoryRoutes);
 app.use("/api/my", myRoutes);
 // TODO Phase 3 slices: customers, categories, orders, inventory, payments, finance
 

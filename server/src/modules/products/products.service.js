@@ -8,7 +8,7 @@ import { parsePagination, paginationMeta } from '../../utils/response.js';
  */
 export async function listProducts(query, publicOnly = false) {
   const { search, categoryId, minPrice, maxPrice, sort, isActive, page, limit } = query;
-  const { skip, take } = parsePagination(page, limit);
+  const { skip, limit: take } = parsePagination({ page, limit });
 
   const where = {};
 
