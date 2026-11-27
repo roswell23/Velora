@@ -42,10 +42,39 @@ export default function StockInModal({
     }
   }, [open, initialProductId, productId, products]);
 
+  useEffect(() => {
+    if (!open || !productId) return undefined;
+    let cancelled = false;
+    setUnitCost("");
+    api
+      .get(`/inventory/movements?productId=${productId}&type=STOCK_IN&page=1&limit=1`)
+      .then((response) => {
+        const latestUnitCost = response.data?.[0]?.unitCost;
+        if (!cancelled && latestUnitCost) setUnitCost(String(latestUnitCost));
+      })
+      .catch(() => {
+        // Leave the field empty so staff can enter the cost for a product's first restock.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, productId]);
+
   if (!open) return null;
 
   const selectedProduct = products.find((p) => String(p.id) === productId) || null;
   const qtyNum = Number(quantity);
+  const [costWhole = "", costFraction = ""] = unitCost.split(".");
+  const unitCostCents = Number(costWhole) * 100 + Number((costFraction + "00").slice(0, 2));
+  const totalCents = qtyNum * unitCostCents;
+  const purchaseTotal =
+    Number.isInteger(qtyNum) &&
+    qtyNum > 0 &&
+    Number.isSafeInteger(unitCostCents) &&
+    unitCostCents > 0 &&
+    Number.isSafeInteger(totalCents)
+      ? `${Math.floor(totalCents / 100)}.${String(totalCents % 100).padStart(2, "0")}`
+      : null;
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -168,8 +197,18 @@ export default function StockInModal({
                 placeholder="0.00"
                 required
               />
+              <small className="stockin-cost-note">
+                Auto-filled from the latest stock-in when available. This is supplier cost per
+                bottle and won’t change the product’s selling price.
+              </small>
             </label>
           </div>
+
+          {purchaseTotal && (
+            <p className="stockin-cost-total">
+              Estimated purchase total: <strong>${purchaseTotal}</strong>
+            </p>
+          )}
 
           <label>
             <span>Supplier name</span>

@@ -150,3 +150,24 @@ Create a new product.
 ### Response `201 Created`
 
 Returns created product with `201 Created`.
+
+---
+
+## 6. `PUT /api/products/:id`
+
+Update product details. The inventory product details modal uses this endpoint to update the selling price.
+
+- **Role:** `INVENTORY`, `ADMIN`
+- **Request:** Any supported fields from the product update schema; all fields are optional.
+
+### Request Body (JSON)
+
+```json
+{
+  "unitPrice": 195.00
+}
+```
+
+### Response `200 OK`
+
+Returns the updated product, including its current category and selling price. Existing order item prices and stock movement unit costs are unchanged.

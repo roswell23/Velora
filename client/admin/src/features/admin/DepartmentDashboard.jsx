@@ -20,6 +20,7 @@ import {
   Wallet,
 } from "lucide-react";
 import CustomerModal from "../../components/CustomerModal.jsx";
+import ProductDetailsModal from "../../components/ProductDetailsModal.jsx";
 import RecordPaymentModal from "../../components/RecordPaymentModal.jsx";
 import StaffModal from "../../components/StaffModal.jsx";
 import StockInModal from "../../components/StockInModal.jsx";
@@ -156,6 +157,7 @@ export default function DepartmentDashboard({ department = "sales" }) {
   const [movements, setMovements] = useState([]);
   const [financeSummary, setFinanceSummary] = useState(null);
   const [paymentOrder, setPaymentOrder] = useState(null);
+  const [selectedProduct, setSelectedProduct] = useState(null);
 
   const [loadingData, setLoadingData] = useState(false);
   const [busyId, setBusyId] = useState(null);
@@ -1159,10 +1161,17 @@ export default function DepartmentDashboard({ department = "sales" }) {
                     return (
                       <tr key={item.id}>
                         <td className="table-primary">
-                          <span className="table-mark">
-                            <Package size={14} />
-                          </span>
-                          {item.name}
+                          <button
+                            type="button"
+                            className="product-name-button"
+                            onClick={() => setSelectedProduct(item)}
+                            aria-label={`View and edit ${item.name}`}
+                          >
+                            <span className="table-mark">
+                              <Package size={14} />
+                            </span>
+                            {item.name}
+                          </button>
                         </td>
                         <td>{item.sku}</td>
                         <td>{item.category?.name || "—"}</td>
@@ -1324,6 +1333,19 @@ export default function DepartmentDashboard({ department = "sales" }) {
             `Added stock to ${product.name}. New stock: ${product.stock} bottles (live on Customer Storefront).`
           );
           loadLiveData();
+        }}
+      />
+
+      <ProductDetailsModal
+        product={selectedProduct}
+        canEdit={user?.role === "ADMIN" || user?.role === "INVENTORY"}
+        onClose={() => setSelectedProduct(null)}
+        onUpdated={(updatedProduct) => {
+          setProducts((current) =>
+            current.map((product) => (product.id === updatedProduct.id ? updatedProduct : product))
+          );
+          setSelectedProduct(updatedProduct);
+          setNotice(`Updated selling price for ${updatedProduct.name}.`);
         }}
       />
 

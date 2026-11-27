@@ -63,6 +63,7 @@ VÉLORA is developed as a modular client-server system for the System Integratio
 - **Backend:** Node.js (ES modules), Express.js, Zod
 - **Database & ORM:** PostgreSQL (Neon), Prisma ORM
 - **Auth & Security:** JWT, Argon2id, Helmet, CORS, Express Rate Limit
+- **Email:** Brevo (Transactional Email API)
 - **Testing:** Vitest, Supertest
 
 ---

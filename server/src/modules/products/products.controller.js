@@ -21,3 +21,12 @@ export async function getProductHandler(req, res, next) {
     next(err);
   }
 }
+
+export async function updateProductHandler(req, res, next) {
+  try {
+    const product = await productsService.updateProduct(req.params.id, req.body);
+    sendSuccess(res, 200, product);
+  } catch (err) {
+    next(err);
+  }
+}

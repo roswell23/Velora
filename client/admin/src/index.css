@@ -1091,6 +1091,63 @@ td.table-primary {
   color: #292c27;
   font-weight: 500;
 }
+.product-name-button {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.product-name-button:hover {
+  color: #667360;
+}
+.product-detail-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #e6e3da;
+  border-radius: 6px;
+  background: #fbfaf7;
+}
+.product-detail-summary .table-mark {
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  margin: 0;
+}
+.product-detail-summary div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.product-detail-summary strong {
+  color: #292c27;
+  font-size: 13px;
+}
+.product-detail-summary div > span {
+  color: #77786f;
+  font-size: 11px;
+}
+.product-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 9px 12px;
+  padding: 4px 0;
+  font-size: 12px;
+}
+.product-detail-grid span {
+  color: #77786f;
+}
+.product-detail-grid strong {
+  color: #292c27;
+  font-weight: 500;
+  text-align: right;
+}
 .table-mark {
   display: inline-grid;
   place-items: center;
@@ -1317,6 +1374,21 @@ td.table-primary {
   color: #242620;
   font-size: 13px;
 }
+.stockin-cost-note {
+  color: #77786f;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+.stockin-cost-total {
+  margin: -7px 0 0;
+  color: #45483e;
+  font-size: 12px;
+}
+.stockin-cost-total strong {
+  color: #242620;
+  font-variant-numeric: tabular-nums;
+}
 .erp-modal-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1412,7 +1484,10 @@ td.table-primary {
 
 /* Sign-in */
 .login-screen {
+  width: 100%;
+  min-width: 0;
   min-height: 100vh;
+  overflow-x: clip;
   display: grid;
   grid-template-columns: minmax(340px, 0.92fr) 1.08fr;
   background: #f5f2e9;
@@ -1822,6 +1897,7 @@ td.table-primary {
 @media (max-width: 900px) {
   .login-screen {
     width: 100%;
+    max-width: 100%;
     min-width: 0;
     min-height: 100vh;
     min-height: 100dvh;
@@ -1829,6 +1905,7 @@ td.table-primary {
   }
   .login-panel {
     width: 100%;
+    max-width: 100%;
     min-width: 0;
     min-height: 100vh;
     min-height: 100dvh;
@@ -1836,6 +1913,7 @@ td.table-primary {
   }
   .login-inner {
     width: min(100%, 420px);
+    max-width: 100%;
     min-width: 0;
   }
   .login-heading {
@@ -1855,6 +1933,8 @@ td.table-primary {
     width: 100%;
   }
   .login-form input {
+    box-sizing: border-box;
+    width: 100%;
     min-width: 0;
     max-width: 100%;
   }
