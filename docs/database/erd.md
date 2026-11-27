@@ -132,6 +132,15 @@ erDiagram
         datetime createdAt "default now"
     }
 
+    EmailVerificationCode {
+        int id PK
+        string email "verification target"
+        string codeHash "hashed single-use 6-digit code"
+        datetime expiresAt
+        datetime usedAt "nullable"
+        datetime createdAt "default now"
+    }
+
     AuditLog {
         int id PK
         int actorId FK "nullable, User FK"
@@ -280,6 +289,17 @@ erDiagram
 | `details`    | `TEXT`         | Yes      |                        | Supplemental metadata or JSON payload       |
 | `createdAt`  | `TIMESTAMP(3)` | No       | `DEFAULT NOW()`        | Log timestamp                               |
 
+### 3.11 `EmailVerificationCode`
+
+| Column      | Type           | Nullable | Attributes             | Description                                |
+| ----------- | -------------- | -------- | ---------------------- | ------------------------------------------ |
+| `id`        | `INT`          | No       | `PK`, `AUTO_INCREMENT` | Verification code record ID               |
+| `email`     | `VARCHAR(255)` | No       | `INDEX`                | Email address being verified              |
+| `codeHash`  | `VARCHAR(64)`  | No       |                        | Hash of the single-use 6-digit signup code|
+| `expiresAt` | `TIMESTAMP(3)` | No       | `INDEX`                | Code expiration timestamp (10-minute TTL) |
+| `usedAt`    | `TIMESTAMP(3)` | Yes      |                        | Set after successful verification         |
+| `createdAt` | `TIMESTAMP(3)` | No       | `DEFAULT NOW()`        | Code generation timestamp                 |
+
 ---
 
 ## 4. Key Relational Invariants & Rules
@@ -291,3 +311,5 @@ erDiagram
    - Order fulfillment verifies all line item stock, deducts stock, records `SALE` movements, and updates status inside `prisma.$transaction`.
    - Stock-in increments stock and records `STOCK_IN` movement inside `prisma.$transaction`.
 4. **Monetary Precision:** All currency fields (`unitPrice`, `lineTotal`, `total`, `amount`, `unitCost`) use `DECIMAL(10,2)`. No JavaScript floating point math.
+
+5. **Signup Verification:** `EmailVerificationCode` stores hashed, single-use email verification codes and their expiry. It has no foreign key to `User`, because the email is verified before the account is created.

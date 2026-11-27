@@ -1,50 +1,74 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 
-const { prismaMock, verifyPasswordMock } = vi.hoisted(() => {
-  const mock = {
-    user: {
-      findUnique: vi.fn(),
-      findMany: vi.fn(),
-      count: vi.fn(),
-    },
-    product: {
-      findMany: vi.fn(),
-      findFirst: vi.fn(),
-      findUnique: vi.fn(),
-      update: vi.fn(),
-      count: vi.fn(),
-    },
-    category: {
-      findMany: vi.fn(),
-    },
-    customer: {
-      findUnique: vi.fn(),
-      findMany: vi.fn(),
-      create: vi.fn(),
-      count: vi.fn(),
-    },
-    order: {
-      findUnique: vi.fn(),
-      findMany: vi.fn(),
-      create: vi.fn(),
-      update: vi.fn(),
-      count: vi.fn(),
-    },
-    stockMovement: {
-      create: vi.fn(),
-      findMany: vi.fn(),
-      count: vi.fn(),
-    },
-  };
-  mock.$transaction = vi.fn((fn) => fn(mock));
-  return { prismaMock: mock, verifyPasswordMock: vi.fn() };
-});
+const { prismaMock, verifyPasswordMock, hashPasswordMock, sendVerificationCodeEmailMock } =
+  vi.hoisted(() => {
+    const mock = {
+      user: {
+        findUnique: vi.fn(),
+        findMany: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+        count: vi.fn(),
+      },
+      emailVerificationCode: {
+        updateMany: vi.fn(),
+        create: vi.fn(),
+        findFirst: vi.fn(),
+        update: vi.fn(),
+      },
+      passwordResetToken: {
+        findUnique: vi.fn(),
+        updateMany: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+      },
+      product: {
+        findMany: vi.fn(),
+        findFirst: vi.fn(),
+        findUnique: vi.fn(),
+        update: vi.fn(),
+        count: vi.fn(),
+      },
+      category: {
+        findMany: vi.fn(),
+      },
+      customer: {
+        findUnique: vi.fn(),
+        findMany: vi.fn(),
+        create: vi.fn(),
+        count: vi.fn(),
+      },
+      order: {
+        findUnique: vi.fn(),
+        findMany: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+        count: vi.fn(),
+      },
+      stockMovement: {
+        create: vi.fn(),
+        findMany: vi.fn(),
+        count: vi.fn(),
+      },
+    };
+    mock.$transaction = vi.fn((fn) => fn(mock));
+    return {
+      prismaMock: mock,
+      verifyPasswordMock: vi.fn(),
+      hashPasswordMock: vi.fn(),
+      sendVerificationCodeEmailMock: vi.fn(),
+    };
+  });
 
 vi.mock("../src/utils/prisma.js", () => ({ default: prismaMock }));
 vi.mock("../src/utils/password.js", () => ({
-  hashPassword: vi.fn(),
+  hashPassword: hashPasswordMock,
   verifyPassword: verifyPasswordMock,
+}));
+vi.mock("../src/utils/email.js", () => ({
+  sendVerificationCodeEmail: sendVerificationCodeEmailMock,
+  sendPasswordResetEmail: vi.fn().mockResolvedValue(undefined),
 }));
 
 import app from "../src/app.js";
@@ -83,6 +107,8 @@ describe("API verification", () => {
     prismaMock.user.findMany.mockResolvedValue([]);
     prismaMock.user.count.mockResolvedValue(0);
     verifyPasswordMock.mockResolvedValue(true);
+    hashPasswordMock.mockResolvedValue("hashed-password");
+    sendVerificationCodeEmailMock.mockResolvedValue(undefined);
   });
 
   it("returns the standard health envelope", async () => {
@@ -338,5 +364,54 @@ describe("API verification", () => {
       .set("Authorization", bearer(admin));
     expect(okRes.status).toBe(200);
     expect(okRes.body.data.status).toBe("FULFILLED");
+  });
+
+  it("TC-AUTH-01 sends a 6-digit registration code and rejects invalid codes", async () => {
+    const sendRes = await request(app).post("/api/auth/register/send-code").send({
+      email: "newcustomer@example.com",
+    });
+
+    expect(sendRes.status).toBe(200);
+    expect(prismaMock.emailVerificationCode.create).toHaveBeenCalled();
+    expect(sendVerificationCodeEmailMock).toHaveBeenCalledWith(
+      "newcustomer@example.com",
+      expect.stringMatching(/^\d{6}$/)
+    );
+
+    prismaMock.emailVerificationCode.findFirst.mockResolvedValue(null);
+    const badRegRes = await request(app).post("/api/auth/register").send({
+      name: "New Customer",
+      email: "newcustomer@example.com",
+      password: "Password123!",
+      phone: "+639171234567",
+      verificationCode: "123456",
+    });
+
+    expect(badRegRes.status).toBe(400);
+    expect(badRegRes.body.error.code).toBe("INVALID_OR_EXPIRED_CODE");
+  });
+
+  it("TC-AUTH-08 resets customer password using a valid 6-digit code", async () => {
+    prismaMock.passwordResetToken.findUnique.mockResolvedValue({
+      id: 9,
+      userId: customer.id,
+      usedAt: null,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      user: customer,
+    });
+
+    const resetRes = await request(app).post("/api/auth/reset-password").send({
+      email: customer.email,
+      code: "654321",
+      newPassword: "NewPassword123!",
+    });
+
+    expect(resetRes.status).toBe(200);
+    expect(prismaMock.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: customer.id } })
+    );
+    expect(prismaMock.passwordResetToken.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 9 } })
+    );
   });
 });

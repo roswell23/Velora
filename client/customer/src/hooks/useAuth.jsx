@@ -39,11 +39,23 @@ export function AuthProvider({ children }) {
     return res.data.user;
   }
 
+  async function sendRegisterCode(email) {
+    return api.post("/auth/register/send-code", { email });
+  }
+
   async function register(payload) {
     const res = await api.post("/auth/register", payload);
     localStorage.setItem(TOKEN_KEY, res.data.token);
     setUser(res.data.user);
     return res.data.user;
+  }
+
+  async function forgotPassword(email) {
+    return api.post("/auth/forgot-password", { email });
+  }
+
+  async function resetPassword(payload) {
+    return api.post("/auth/reset-password", payload);
   }
 
   function logout() {
@@ -52,7 +64,18 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        login,
+        sendRegisterCode,
+        register,
+        forgotPassword,
+        resetPassword,
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

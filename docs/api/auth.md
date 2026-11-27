@@ -1,11 +1,44 @@
 # API Spec: Authentication & Session (`/api/auth`)
 
-## 1. `POST /api/auth/register`
+## 1. `POST /api/auth/register/send-code`
 
-Creates a new customer account and automatically generates a linked `Customer` record.
+Sends a single-use 6-digit verification code to the customer's email address (10-minute TTL) via Brevo before completing registration.
 
 - **Role:** Public (No login required)
-- **Rate Limit:** 10 requests per 15 minutes per IP
+- **Rate Limit:** 5 requests per 15 minutes per IP.
+
+### Request Body (JSON)
+
+```json
+{
+  "email": "jane@example.com"
+}
+```
+
+### Response `200 OK`
+
+```json
+{
+  "success": true,
+  "data": {
+    "message": "A 6-digit verification code has been sent to your email."
+  }
+}
+```
+
+### Errors
+
+- `400 Bad Request` (`VALIDATION_ERROR`): Invalid email format.
+- `409 Conflict` (`EMAIL_EXISTS`): Email already in use.
+- `429 Too Many Requests` (`RATE_LIMITED`): Too many verification requests.
+
+---
+
+## 2. `POST /api/auth/register`
+
+Verifies the 6-digit email verification code, creates a new customer account, and automatically generates a linked `Customer` record.
+
+- **Role:** Public (No login required)
 
 ### Request Body (JSON)
 
@@ -15,7 +48,8 @@ Creates a new customer account and automatically generates a linked `Customer` r
   "email": "jane@example.com",
   "password": "Password123!",
   "phone": "+639171234567",
-  "address": "123 Elegance Ave, Makati City"
+  "address": "123 Elegance Ave, Makati City",
+  "verificationCode": "482910"
 }
 ```
 
@@ -24,6 +58,7 @@ Creates a new customer account and automatically generates a linked `Customer` r
 - `password` (string, required, min 8 chars)
 - `phone` (string, required, 7–30 chars)
 - `address` (string, optional, 5–500 chars when provided)
+- `verificationCode` (string, required, 6 digits)
 
 ### Response `201 Created`
 
@@ -44,7 +79,7 @@ Creates a new customer account and automatically generates a linked `Customer` r
 
 ### Errors
 
-- `400 Bad Request`: Password < 8 characters or invalid format.
+- `400 Bad Request`: Password < 8 characters, invalid format, or invalid/expired `verificationCode` (`INVALID_OR_EXPIRED_CODE`).
 - `409 Conflict`: Email already in use (`EMAIL_EXISTS`).
 
 ---
@@ -54,7 +89,7 @@ Creates a new customer account and automatically generates a linked `Customer` r
 Customer login endpoint. Strictly rejects non-CUSTOMER roles.
 
 - **Role:** Public
-- **Rate Limit:** 5 requests per 15 minutes per IP
+- **Rate Limit:** Five consecutive invalid credentials for the same email lock this endpoint for 10 minutes. A secondary IP limit allows 30 requests per 15 minutes.
 
 ### Request Body (JSON)
 
@@ -87,7 +122,8 @@ Customer login endpoint. Strictly rejects non-CUSTOMER roles.
 - `400 Bad Request` (`VALIDATION_ERROR`): Invalid request data (`details` array with `{ field, issue }`).
 - `401 Unauthorized`: Generic message `"Invalid email or password."` (used for incorrect credentials or if a staff member attempts customer login).
 - `403 Forbidden` (`ACCOUNT_DEACTIVATED`): `"This account has been deactivated."`
-- `429 Too Many Requests` (`RATE_LIMITED`): `"Too many login attempts. Please try again later."`
+- `429 Too Many Requests` (`RATE_LIMITED`): Too many requests from this IP.
+- `429 Too Many Requests` (`LOGIN_LOCKED`): Five consecutive invalid credentials; retry after 10 minutes. Includes `Retry-After` and `details.retryAfterSeconds`.
 
 ---
 
@@ -96,7 +132,7 @@ Customer login endpoint. Strictly rejects non-CUSTOMER roles.
 Staff login endpoint for ERP Portal. Rejects `CUSTOMER` role.
 
 - **Role:** Public
-- **Rate Limit:** 5 requests per 15 minutes per IP
+- **Rate Limit:** Five consecutive invalid credentials for the same email lock this endpoint for 10 minutes. A secondary IP limit allows 30 requests per 15 minutes.
 
 ### Request Body (JSON)
 
@@ -128,6 +164,7 @@ Staff login endpoint for ERP Portal. Rejects `CUSTOMER` role.
 
 - `401 Unauthorized`: Generic message `"Invalid email or password"`.
 - `403 Forbidden`: Account deactivated (`ACCOUNT_DEACTIVATED`).
+- `429 Too Many Requests` (`LOGIN_LOCKED`): Five consecutive invalid credentials; retry after 10 minutes. Includes `Retry-After` and `details.retryAfterSeconds`.
 
 ---
 
@@ -161,11 +198,21 @@ Initiates password reset. Always returns identical generic message regardless of
 
 ## 5. `POST /api/auth/reset-password`
 
-Resets password with valid single-use token within 30 minutes.
+Resets password with either a valid single-use 6-digit customer code (`email` + `code`) or a staff reset token (`token`) within 30 minutes.
 
 - **Role:** Public
 
-### Request Body (JSON)
+### Request Body (JSON — Customer 6-digit Code)
+
+```json
+{
+  "email": "jane@example.com",
+  "code": "482910",
+  "newPassword": "NewStrongPassword123!"
+}
+```
+
+### Request Body (JSON — Staff Reset Token)
 
 ```json
 {

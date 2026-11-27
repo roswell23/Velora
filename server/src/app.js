@@ -10,6 +10,8 @@ import productsRoutes from "./modules/products/products.routes.js";
 import customersRoutes from "./modules/customers/customers.routes.js";
 import ordersRoutes from "./modules/orders/orders.routes.js";
 import inventoryRoutes from "./modules/inventory/inventory.routes.js";
+import financeRoutes from "./modules/finance/finance.routes.js";
+import paymentsRoutes from "./modules/payments/payments.routes.js";
 import myRoutes from "./modules/my/my.routes.js";
 
 const app = express();
@@ -44,6 +46,8 @@ app.use("/api/products", productsRoutes);
 app.use("/api/customers", customersRoutes);
 app.use("/api/orders", ordersRoutes);
 app.use("/api/inventory", inventoryRoutes);
+app.use("/api/finance", financeRoutes);
+app.use("/api/payments", paymentsRoutes);
 app.use("/api/my", myRoutes);
 // TODO Phase 3 slices: customers, categories, orders, inventory, payments, finance
 

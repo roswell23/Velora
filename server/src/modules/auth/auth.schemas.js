@@ -1,11 +1,16 @@
 import { z } from "zod";
 
+export const sendVerificationCodeSchema = z.object({
+  email: z.string().email(),
+});
+
 export const registerSchema = z.object({
   name: z.string().min(2).max(100),
   email: z.string().email(),
   password: z.string().min(8, "Password must be at least 8 characters."),
   phone: z.string().min(7).max(30),
   address: z.string().min(5).max(500).optional(),
+  verificationCode: z.string().regex(/^\d{6}$/, "Verification code must be 6 digits."),
 });
 
 export const loginSchema = z.object({
@@ -17,7 +22,14 @@ export const forgotPasswordSchema = z.object({
   email: z.string().email(),
 });
 
-export const resetPasswordSchema = z.object({
-  token: z.string().min(1),
-  newPassword: z.string().min(8, "Password must be at least 8 characters."),
-});
+export const resetPasswordSchema = z.union([
+  z.object({
+    token: z.string().min(1),
+    newPassword: z.string().min(8, "Password must be at least 8 characters."),
+  }),
+  z.object({
+    email: z.string().email(),
+    code: z.string().regex(/^\d{6}$/, "Verification code must be 6 digits."),
+    newPassword: z.string().min(8, "Password must be at least 8 characters."),
+  }),
+]);

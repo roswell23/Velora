@@ -1,6 +1,6 @@
 # Spec: ERP Inventory & Warehouse
 
-Owner: Member 4 Status: Approved Version: 1.0
+Owner: Member 4 Status: Approved Version: 1.1
 
 ## 1. Purpose
 
@@ -8,7 +8,7 @@ Manage product items and olfactory categories, handle supplier restocking (stock
 
 ## 2. Roles and Permissions
 
-- **`INVENTORY`, `ADMIN`:** Full management of categories, products, stock-in, stock adjustments, low-stock inspection, and order fulfillment.
+- **`INVENTORY`, `ADMIN`:** Full management of categories, products, stock-in, and stock adjustments. Inventory staff can view pending orders; only `ADMIN` can fulfill or cancel orders.
 - **`FINANCE`:** Read-only access to stock movement history and unit costs.
 - **`SALES`:** Read-only access to product catalog and stock availability.
 - **`CUSTOMER`:** Public read-only access to active products.
@@ -48,13 +48,14 @@ Manage product items and olfactory categories, handle supplier restocking (stock
 - `POST /api/inventory/adjust` — `INVENTORY`, `ADMIN`; manual stock adjustment.
 - `GET /api/inventory/low-stock` — `INVENTORY`, `ADMIN`; retrieve products at or below reorder level.
 - `GET /api/inventory/movements` — `INVENTORY`, `ADMIN`, `FINANCE`; audit trail of stock movements.
-- `POST /api/orders/:id/fulfill` — `INVENTORY`, `ADMIN`; execute atomic order fulfillment.
+- `POST /api/orders/:id/fulfill` — `ADMIN`; execute atomic order fulfillment.
+- `POST /api/orders/:id/cancel` — `ADMIN`; cancel a pending order.
 
 ## 6. UI Pages and Behavior
 
 - **Inventory Dashboard (`/admin/inventory`):**
   - KPI Stat Cards: Total Products, Low Stock Count, Orders Awaiting Fulfillment.
-  - Quick action shortcuts: Restock, New Product, Fulfill Orders.
+  - Quick action shortcuts: Restock and New Product.
 - **Product & Category Management (`/admin/inventory/products`):**
   - Data table of products: SKU, Name, Category, Size, Price, Current Stock, Status (`Active` / `Inactive`).
   - Search by name/SKU, category filter dropdown.
@@ -67,12 +68,15 @@ Manage product items and olfactory categories, handle supplier restocking (stock
   - Product selector, Quantity to add, Unit Procurement Cost, Supplier text, Notes.
 - **Stock Movement Log (`/admin/inventory/movements`):**
   - Read-only table showing Date, Product SKU, Type (`STOCK_IN`, `SALE`, `ADJUSTMENT`), Quantity (+/-), Unit Cost, Reason, Staff Actor.
-- **Orders to Fulfill View (`/admin/inventory/fulfill`):**
-  - List of `PENDING` orders with items breakdown and current stock indicator.
-  - "Fulfill Order" button with confirmation prompt.
+- **Sales Orders (`/sales`):**
+  - Admin sees pending orders with admin-only "Fulfill" and "Cancel" actions.
+  - Sales staff can view order status but cannot change it.
+- **Inventory Pending Orders:**
+  - Inventory staff may inspect `PENDING` orders and item requirements, but cannot change order status.
 
 ## 7. Business Rules and Validations
 
+- Only `ADMIN` may fulfill or cancel an order. `SALES` and `INVENTORY` roles can view statuses but cannot change them.
 - Order fulfillment MUST be atomic using `prisma.$transaction`:
   1. Lock and check `Product.stock >= lineItem.quantity` for all items.
   2. If any item is short, throw error with exact missing item and abort transaction.
@@ -84,10 +88,10 @@ Manage product items and olfactory categories, handle supplier restocking (stock
 
 ## 8. Acceptance Criteria
 
-- **Scenario:** Order Fulfillment (Workflow 1 Step 3)
-  - Given a pending order for 1 bottle of Santal Royale and current stock = 10, When Inventory triggers fulfill, Then stock decreases to 9, a `SALE` movement (-1) is recorded, and order status transitions to `FULFILLED` [INV-08].
+- **Scenario:** Admin Order Fulfillment (Workflow 1 Step 3)
+  - Given a pending order for 1 bottle of Santal Royale and current stock = 10, When Admin triggers fulfill from Sales orders, Then stock decreases to 9, a `SALE` movement (-1) is recorded, and order status transitions to `FULFILLED` [INV-08].
 - **Scenario:** Fulfillment Rollback on Stock Shortage
-  - Given a pending order for 5 bottles and current stock = 2, When Inventory triggers fulfill, Then fulfillment is rejected with 400 Bad Request and stock remains unchanged at 2 [INV-08, INV-09].
+  - Given a pending order for 5 bottles and current stock = 2, When Admin triggers fulfill, Then fulfillment is rejected with 400 Bad Request and stock remains unchanged at 2 [INV-08, INV-09].
 - **Scenario:** Restock Execution (Workflow 2 Step 2)
   - Given a perfume with stock = 2, When Inventory records stock-in of 15 units at unit cost $80, Then stock increases to 17, a `STOCK_IN` movement (+15, unitCost $80) is logged, and product drops out of low-stock view [INV-04, INV-06].
 - **Scenario:** Non-Negativity Enforcement

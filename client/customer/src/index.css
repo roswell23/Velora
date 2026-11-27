@@ -1391,31 +1391,18 @@ select:focus-visible {
 }
 .store-footer {
   padding: 43px 8%;
-  display: grid;
-  grid-template-columns: 1fr 1fr 2fr 1fr;
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 20px;
+  gap: 24px;
   background: #292c27;
   color: #f2f0e9;
 }
 .footer-mark {
   font-size: 19px;
 }
-.store-footer > p {
-  color: #b5b5aa;
-  font: italic 12px var(--serif);
-}
-.store-footer > div {
-  justify-self: center;
-  display: flex;
-  gap: 25px;
-}
-.store-footer a:not(.wordmark) {
-  color: #cbcbbf;
-  font-size: 9px;
-}
 .store-footer small {
-  justify-self: end;
+  margin-left: auto;
   color: #898c82;
   font-size: 8px;
 }
@@ -1693,15 +1680,6 @@ select:focus-visible {
   }
   .story-copy {
     padding: 60px 8%;
-  }
-  .store-footer {
-    grid-template-columns: 1fr 1fr;
-  }
-  .store-footer > div {
-    justify-self: start;
-  }
-  .store-footer small {
-    justify-self: end;
   }
 }
 @media (max-width: 620px) {
@@ -1987,24 +1965,14 @@ select:focus-visible {
   }
   .store-footer {
     padding: 34px 7%;
-    grid-template-columns: 1fr 1fr;
+    flex-wrap: wrap;
     gap: 10px;
   }
   .footer-mark {
     font-size: 17px;
   }
-  .store-footer > p {
-    font-size: 10px;
-    text-align: right;
-  }
-  .store-footer > div {
-    grid-column: 1 / -1;
-    gap: 21px;
-  }
   .store-footer small {
-    grid-column: 1 / -1;
-    justify-self: start;
-    margin-top: 14px;
+    font-size: 7px;
   }
   .bag-drawer {
     padding: 24px 20px;
@@ -2019,6 +1987,80 @@ select:focus-visible {
   .save-button {
     width: 40px;
     height: 40px;
+  }
+}
+
+/* Tablet and small-screen storefront navigation and page spacing */
+@media (max-width: 760px) {
+  .store-header {
+    height: 64px;
+    padding: 0 4%;
+    grid-template-columns: 36px minmax(90px, 1fr) auto;
+    gap: 5px;
+  }
+  .mobile-menu-button {
+    display: inline-flex;
+    justify-self: start;
+  }
+  .wordmark {
+    font-size: 21px;
+  }
+  .store-nav {
+    display: none;
+    position: absolute;
+    top: 64px;
+    right: 0;
+    left: 0;
+    padding: 18px 7%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    background: var(--paper);
+    border-bottom: 1px solid var(--line);
+    box-shadow: 0 14px 25px #2221;
+  }
+  .store-nav.is-open {
+    display: flex;
+  }
+  .store-nav a {
+    padding: 13px 0;
+    border-bottom: 1px solid #e5e3dc;
+  }
+  .header-actions {
+    min-width: 0;
+    gap: 9px;
+  }
+  .header-search {
+    width: clamp(68px, 13vw, 96px);
+    min-width: 0;
+  }
+  .header-search input {
+    min-width: 0;
+    font-size: 10px;
+  }
+  .bag-label {
+    display: none;
+  }
+  .bag-trigger {
+    gap: 4px;
+    padding: 7px 0;
+  }
+  .catalog-page,
+  .product-detail-page {
+    padding-right: 6%;
+    padding-left: 6%;
+  }
+  .catalog-hero-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .catalog-category-bar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .catalog-pagination {
+    flex-wrap: wrap;
+    justify-content: center;
   }
 }
 
@@ -2037,8 +2079,16 @@ select:focus-visible {
     gap: 5px;
   }
   .header-search {
-    width: 44px;
+    width: 58px;
     gap: 4px;
+  }
+  .header-actions > .auth-header-action {
+    min-width: 40px;
+    min-height: 40px;
+    justify-content: center;
+  }
+  .header-actions > .auth-header-action span {
+    display: none;
   }
   .account-greeting {
     display: none;
@@ -2173,6 +2223,61 @@ select:focus-visible {
   background: #eef3ea;
   border-color: #bfd0b6;
   color: #2f4f28;
+}
+.auth-banner-info {
+  background: #f2efe5;
+  border-color: #d6cba9;
+  color: #554b32;
+}
+.auth-field-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.auth-inline-link {
+  font-size: 11px;
+  color: #7d6b45;
+  border-bottom: 1px solid transparent;
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease;
+}
+.auth-inline-link:hover {
+  color: #292c27;
+  border-bottom-color: #b49a62;
+}
+.auth-otp-input {
+  letter-spacing: 0.35em;
+  text-align: center;
+  font-size: 18px !important;
+  font-weight: 500;
+}
+.auth-secondary-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 4px;
+}
+.auth-text-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: #686a62;
+  font-size: 11px;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+.auth-text-btn:hover:not(:disabled) {
+  color: #292c27;
+}
+.auth-text-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .auth-form {
   display: flex;

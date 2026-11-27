@@ -1,5 +1,5 @@
 import dotenv from "dotenv";
-dotenv.config();
+dotenv.config({ path: new URL("../../.env", import.meta.url) });
 
 export const env = {
   NODE_ENV: process.env.NODE_ENV || "development",
@@ -14,9 +14,8 @@ export const env = {
   ARGON2_TIME_COST: parseInt(process.env.ARGON2_TIME_COST || "2", 10),
   ARGON2_PARALLELISM: parseInt(process.env.ARGON2_PARALLELISM || "1", 10),
   RESET_TOKEN_TTL_MINUTES: parseInt(process.env.RESET_TOKEN_TTL_MINUTES || "30", 10),
-  SMTP_HOST: process.env.SMTP_HOST || "",
-  SMTP_PORT: parseInt(process.env.SMTP_PORT || "587", 10),
-  SMTP_USER: process.env.SMTP_USER || "",
-  SMTP_PASS: process.env.SMTP_PASS || "",
+  BREVO_API_KEY: process.env.BREVO_API_KEY || "",
+  BREVO_SENDER_EMAIL: process.env.BREVO_SENDER_EMAIL || "",
+  BREVO_SENDER_NAME: process.env.BREVO_SENDER_NAME || "VÉLORA",
   EMAIL_FROM: process.env.EMAIL_FROM || "VÉLORA <no-reply@velora.local>",
 };

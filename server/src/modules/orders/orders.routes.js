@@ -28,13 +28,14 @@ router.post(
 );
 router.post(
   "/:id/cancel",
-  requireRole(ROLES.ADMIN, ROLES.SALES),
+  requireRole(ROLES.ADMIN),
   validateParams(orderIdParamSchema),
   cancelOrderHandler
 );
+// Only ADMIN may change an order's operational status.
 router.post(
   "/:id/fulfill",
-  requireRole(ROLES.ADMIN, ROLES.INVENTORY),
+  requireRole(ROLES.ADMIN),
   validateParams(orderIdParamSchema),
   fulfillOrderHandler
 );

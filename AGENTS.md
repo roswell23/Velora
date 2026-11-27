@@ -108,8 +108,8 @@ Roles: `CUSTOMER`, `ADMIN`, `SALES`, `INVENTORY`, `FINANCE`.
 | Customers: create, view, update, search  |       No       |  Yes  |  Yes  |   View    |  View   |
 | Orders: view and search (all)            |       No       |  Yes  |  Yes  |    Yes    |   Yes   |
 | Orders: create for a walk-in customer    |       No       |  Yes  |  Yes  |    No     |   No    |
-| Orders: cancel (only while PENDING)      |       No       |  Yes  |  Yes  |    No     |   No    |
-| Orders: fulfill (deduct stock)           |       No       |  Yes  |  No   |    Yes    |   No    |
+| Orders: cancel (only while PENDING)      |       No       |  Yes  |  No   |    No     |   No    |
+| Orders: fulfill (deduct stock)           |       No       |  Yes  |  No   |    No     |   No    |
 | Products and categories: create, update  |       No       |  Yes  |  No   |    Yes    |   No    |
 | Stock-in, stock adjustment               |       No       |  Yes  |  No   |    Yes    |   No    |
 | Stock movement history                   |       No       |  Yes  |  No   |    Yes    |  View   |
@@ -130,7 +130,7 @@ _Rules:_
 
 1. **E-Commerce:** Customer registers/logs in, adds products to cart, and checks out with COD. Backend validates stock and prices, creates order (`PENDING`, `UNPAID`, `ONLINE`). Customer tracks order.
 2. **Sales:** Order appears in ERP Sales order list (`ONLINE` filter) with customer details.
-3. **Inventory:** Order appears in "Orders to fulfill". In a single transaction: stock deducted, `SALE` stock movement recorded, status updated to `FULFILLED`. Fails if insufficient stock.
+3. **Admin (Sales order list):** Admin fulfills the pending order. In a single transaction: stock deducted, `SALE` stock movement recorded, status updated to `FULFILLED`. Fails if insufficient stock.
 4. **E-Commerce:** Customer order tracker reflects `Fulfilled`.
 5. **Finance:** Order appears in unpaid fulfilled list. Finance records COD payment. Order `paymentStatus` becomes `PAID`, revenue updates.
 

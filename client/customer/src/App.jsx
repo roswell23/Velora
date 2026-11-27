@@ -18,6 +18,8 @@ import StorefrontLayout from "./components/StorefrontLayout.jsx";
 import { BagProvider, useBag } from "./hooks/useBag.jsx";
 import LoginPage from "./features/auth/LoginPage.jsx";
 import RegisterPage from "./features/auth/RegisterPage.jsx";
+import ForgotPasswordPage from "./features/auth/ForgotPasswordPage.jsx";
+import ResetPasswordPage from "./features/auth/ResetPasswordPage.jsx";
 import CatalogPage from "./features/catalog/CatalogPage.jsx";
 import ProductDetailPage from "./features/catalog/ProductDetailPage.jsx";
 import CheckoutPage from "./features/checkout/CheckoutPage.jsx";
@@ -613,6 +615,8 @@ export default function App() {
         <Route path="/product/:id" element={<ProductDetailPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/checkout" element={<CheckoutPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

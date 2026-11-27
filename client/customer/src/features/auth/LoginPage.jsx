@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowRight, CheckCircle2, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../../hooks/useAuth.jsx";
 import AuthLayout from "./AuthLayout.jsx";
@@ -119,7 +119,12 @@ export default function LoginPage() {
         </div>
 
         <div className="auth-field">
-          <label htmlFor="login-password">Password</label>
+          <div className="auth-field-row">
+            <label htmlFor="login-password">Password</label>
+            <Link className="auth-inline-link" to="/forgot-password">
+              Forgot password?
+            </Link>
+          </div>
           <div className="auth-password-wrap">
             <input
               id="login-password"

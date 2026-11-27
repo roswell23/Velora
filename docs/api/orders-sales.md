@@ -86,7 +86,21 @@ Returns full order object with customer, items, and timestamps.
 
 Cancel an order while still `PENDING`.
 
-- **Role:** `SALES`, `ADMIN`
+- **Role:** `ADMIN`
+
+### Errors
+
+- `400 Bad Request`: Order is not pending.
+- `403 Forbidden`: Only Admin can change order status.
+- `404 Not Found`: Order does not exist.
+
+---
+
+## 5. `POST /api/orders/:id/fulfill`
+
+Fulfill a pending order atomically, deducting stock and recording `SALE` stock movements.
+
+- **Role:** `ADMIN`
 
 ### Response `200 OK`
 
@@ -95,7 +109,8 @@ Cancel an order while still `PENDING`.
   "success": true,
   "data": {
     "id": 10,
-    "status": "CANCELLED"
+    "orderNumber": "VEL-2026-0010",
+    "status": "FULFILLED"
   }
 }
 ```

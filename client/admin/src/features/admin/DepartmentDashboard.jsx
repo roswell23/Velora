@@ -20,6 +20,7 @@ import {
   Wallet,
 } from "lucide-react";
 import CustomerModal from "../../components/CustomerModal.jsx";
+import RecordPaymentModal from "../../components/RecordPaymentModal.jsx";
 import StaffModal from "../../components/StaffModal.jsx";
 import StockInModal from "../../components/StockInModal.jsx";
 import WalkInOrderModal from "../../components/WalkInOrderModal.jsx";
@@ -54,14 +55,14 @@ const DEPT_CONFIG = {
   sales: {
     eyebrow: "SALES OPERATIONS",
     title: "Sales & customer ordering",
-    description: "Manage walk-in and online customers, create orders, and track fulfillment.",
+    description: "Manage customers and orders. Admins can cancel or fulfill pending orders here.",
     isLive: true,
     icon: ShoppingBag,
   },
   inventory: {
     eyebrow: "INVENTORY & WAREHOUSE",
     title: "Inventory & stock-in",
-    description: "Add stock, fulfill pending orders, and monitor real-time warehouse levels.",
+    description: "Add stock and monitor real-time warehouse levels and pending order demand.",
     isLive: true,
     icon: Package,
   },
@@ -76,7 +77,7 @@ const DEPT_CONFIG = {
     eyebrow: "FINANCE & RECONCILIATION",
     title: "Finance overview",
     description: "Reconcile collected payments and understand the cost behind every restock.",
-    isLive: false,
+    isLive: true,
     icon: Wallet,
   },
   admin: {
@@ -153,6 +154,8 @@ export default function DepartmentDashboard({ department = "sales" }) {
   const [orders, setOrders] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [movements, setMovements] = useState([]);
+  const [financeSummary, setFinanceSummary] = useState(null);
+  const [paymentOrder, setPaymentOrder] = useState(null);
 
   const [loadingData, setLoadingData] = useState(false);
   const [busyId, setBusyId] = useState(null);
@@ -188,7 +191,8 @@ export default function DepartmentDashboard({ department = "sales" }) {
         promises.movements = api.get("/inventory/movements?limit=50");
       }
       if (department === "finance") {
-        promises.orders = api.get("/orders?limit=100");
+        promises.orders = api.get("/orders?status=FULFILLED&paymentStatus=UNPAID&limit=100");
+        promises.finance = api.get("/finance/dashboard");
       }
 
       const entries = await Promise.all(
@@ -201,6 +205,7 @@ export default function DepartmentDashboard({ department = "sales" }) {
       if (Array.isArray(resultMap.orders?.data)) setOrders(resultMap.orders.data);
       if (Array.isArray(resultMap.customers?.data)) setCustomers(resultMap.customers.data);
       if (Array.isArray(resultMap.movements?.data)) setMovements(resultMap.movements.data);
+      if (resultMap.finance?.data) setFinanceSummary(resultMap.finance.data);
     } catch (err) {
       setErrorBanner(err.message || "Could not refresh workspace records.");
     } finally {
@@ -241,14 +246,6 @@ export default function DepartmentDashboard({ department = "sales" }) {
     () => orders.filter((o) => o.status === "FULFILLED" && o.paymentStatus === "UNPAID"),
     [orders]
   );
-  const paidRevenue = useMemo(
-    () =>
-      orders
-        .filter((o) => o.paymentStatus === "PAID")
-        .reduce((sum, o) => sum + Number(o.total || 0), 0),
-    [orders]
-  );
-
   const metrics = useMemo(() => {
     if (department === "admin") {
       return [
@@ -310,15 +307,30 @@ export default function DepartmentDashboard({ department = "sales" }) {
 
     if (department === "finance") {
       return [
-        { label: "Paid revenue", value: `$${paidRevenue.toFixed(2)}`, change: "Paid orders only", icon: Wallet },
         {
-          label: "Unpaid fulfilled",
-          value: String(fulfilledUnpaidOrders.length),
-          change: "Ready to reconcile",
+          label: "Paid revenue",
+          value: loadingData ? "…" : `$${financeSummary?.paidRevenue || "0.00"}`,
+          change: "Confirmed payment records",
+          icon: Wallet,
+        },
+        {
+          label: "Unpaid receivables",
+          value: loadingData ? "…" : `$${financeSummary?.unpaidReceivables || "0.00"}`,
+          change: `${financeSummary?.unpaidOrderCount || 0} fulfilled orders awaiting payment`,
           icon: Clock3,
         },
-        { label: "Catalog SKUs", value: String(products.length || "—"), change: "Active fragrances", icon: Package },
-        { label: "Low stock alerts", value: String(lowStockCount), change: "Potential restock spend", icon: ArrowUpRight },
+        {
+          label: "Inventory purchase cost",
+          value: loadingData ? "…" : `$${financeSummary?.inventoryPurchaseCost || "0.00"}`,
+          change: `${financeSummary?.stockInCount || 0} recorded stock-ins`,
+          icon: Package,
+        },
+        {
+          label: "Low stock alerts",
+          value: String(lowStockCount),
+          change: "Potential restock spend",
+          icon: ArrowUpRight,
+        },
       ];
     }
 
@@ -337,7 +349,7 @@ export default function DepartmentDashboard({ department = "sales" }) {
     lowStockCount,
     orders.length,
     outOfStockCount,
-    paidRevenue,
+    financeSummary,
     pendingOrdersCount,
     products,
     staffList.length,
@@ -595,8 +607,8 @@ export default function DepartmentDashboard({ department = "sales" }) {
         <div className="preview-notice">
           <Sparkles size={15} aria-hidden="true" />
           <span>
-            <strong>Scaffold preview</strong> · Live orders and catalog metrics are synced, while
-            payment recording connects in the Finance API slice.
+            <strong>Scaffold preview</strong> · Payments and stock-in costs read from the shared
+            database. Payment recording is not connected yet.
           </span>
           <button
             type="button"
@@ -753,7 +765,7 @@ export default function DepartmentDashboard({ department = "sales" }) {
                   className={`work-tab ${inventoryTab === "fulfill" ? "is-active" : ""}`}
                   onClick={() => setInventoryTab("fulfill")}
                 >
-                  Fulfill ({pendingOrdersCount})
+                  Pending orders ({pendingOrdersCount})
                 </button>
                 <button
                   type="button"
@@ -960,15 +972,25 @@ export default function DepartmentDashboard({ department = "sales" }) {
                       </td>
                       <td>${Number(order.total).toFixed(2)}</td>
                       <td>
-                        {order.status === "PENDING" ? (
-                          <button
-                            type="button"
-                            className="table-action-button"
-                            disabled={busyId === order.id}
-                            onClick={() => handleCancelOrder(order)}
-                          >
-                            {busyId === order.id ? "Cancelling…" : "Cancel"}
-                          </button>
+                        {order.status === "PENDING" && user?.role === "ADMIN" ? (
+                          <div className="table-action-group">
+                            <button
+                              type="button"
+                              className="table-action-button"
+                              disabled={busyId === order.id}
+                              onClick={() => handleFulfillOrder(order)}
+                            >
+                              {busyId === order.id ? "Fulfilling…" : "Fulfill"}
+                            </button>
+                            <button
+                              type="button"
+                              className="table-action-button"
+                              disabled={busyId === order.id}
+                              onClick={() => handleCancelOrder(order)}
+                            >
+                              {busyId === order.id ? "Updating…" : "Cancel"}
+                            </button>
+                          </div>
                         ) : (
                           "—"
                         )}
@@ -1038,7 +1060,7 @@ export default function DepartmentDashboard({ department = "sales" }) {
                     <th>ITEMS</th>
                     <th>SOURCE</th>
                     <th>TOTAL</th>
-                    <th>ACTION</th>
+                    {user?.role === "ADMIN" && <th>ACTION</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -1056,16 +1078,9 @@ export default function DepartmentDashboard({ department = "sales" }) {
                       </td>
                       <td>{order.source}</td>
                       <td>${Number(order.total).toFixed(2)}</td>
-                      <td>
-                        <button
-                          type="button"
-                          className="table-action-button"
-                          disabled={busyId === order.id}
-                          onClick={() => handleFulfillOrder(order)}
-                        >
-                          {busyId === order.id ? "Fulfilling…" : "Fulfill order"}
-                        </button>
-                      </td>
+                      {user?.role === "ADMIN" && (
+                        <td>Fulfill this order from Sales → Orders.</td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -1194,6 +1209,7 @@ export default function DepartmentDashboard({ department = "sales" }) {
                   <th>STATUS</th>
                   <th>PAYMENT</th>
                   <th>TOTAL</th>
+                  <th>ACTION</th>
                 </tr>
               </thead>
               <tbody>
@@ -1208,6 +1224,15 @@ export default function DepartmentDashboard({ department = "sales" }) {
                       <StatusPill status={order.paymentStatus} />
                     </td>
                     <td>${Number(order.total).toFixed(2)}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="table-action-button"
+                        onClick={() => setPaymentOrder(order)}
+                      >
+                        Record payment
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -1218,8 +1243,18 @@ export default function DepartmentDashboard({ department = "sales" }) {
             <div className="empty-icon">
               <PageIcon size={20} />
             </div>
-            <strong>You’re all caught up</strong>
-            <p>Fulfilled orders awaiting payment will appear here.</p>
+            <strong>
+              {loadingData
+                ? "Loading fulfilled orders…"
+                : errorBanner
+                  ? "Couldn’t load payment records"
+                  : "No fulfilled unpaid orders"}
+            </strong>
+            <p>
+              {errorBanner
+                ? "Refresh records to try again."
+                : "Orders appear here after Inventory fulfills them. You can record payment from this list."}
+            </p>
           </div>
         )}
 
@@ -1233,7 +1268,9 @@ export default function DepartmentDashboard({ department = "sales" }) {
                   ? `Showing ${filteredCustomers.length} of ${customers.length} customers`
                   : department === "inventory" || department === "catalog"
                     ? `Showing ${filteredProducts.length} of ${products.length} products`
-                    : "Ready when your workspace is"}
+                    : department === "finance"
+                      ? `${fulfilledUnpaidOrders.length} fulfilled orders awaiting payment`
+                      : "Workspace records"}
           </span>
           <button type="button" onClick={loadLiveData}>
             <span>Refresh records</span>
@@ -1286,6 +1323,16 @@ export default function DepartmentDashboard({ department = "sales" }) {
           setNotice(
             `Added stock to ${product.name}. New stock: ${product.stock} bottles (live on Customer Storefront).`
           );
+          loadLiveData();
+        }}
+      />
+
+      <RecordPaymentModal
+        order={paymentOrder}
+        onClose={() => setPaymentOrder(null)}
+        onRecorded={(payment) => {
+          setNotice(`Payment recorded for ${payment.order.orderNumber}.`);
+          setOrders((current) => current.filter((order) => order.id !== payment.order.id));
           loadLiveData();
         }}
       />

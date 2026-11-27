@@ -1,6 +1,6 @@
 # Spec: Foundation (Auth, Roles, Layout, Admin, Seed)
 
-Owner: Shared / Member 5 Status: Approved Version: 1.1
+Owner: Shared / Member 5 Status: Approved Version: 1.2
 
 ## 1. Purpose
 
@@ -18,7 +18,7 @@ Provide unified authentication (JWT, Argon2id), role-based access control (RBAC)
 
 | ID      | Requirement                                                                                                                                                                 | Priority |
 | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| AUTH-01 | Public customer registration creates `User` with role `CUSTOMER` and linked `Customer` record.                                                                              | Must     |
+| AUTH-01 | Public customer registration verifies email via 6-digit OTP code (Brevo), creates `User` with role `CUSTOMER`, and creates linked `Customer` record. | Must |
 | AUTH-02 | Customer login via `POST /api/auth/login` verifies Argon2id hash and rejects staff roles.                                                                                   | Must     |
 | AUTH-03 | Staff login via `POST /api/auth/staff-login` verifies credentials, rejects `CUSTOMER` role, and blocks deactivated users.                                                   | Must     |
 | AUTH-04 | Password hashing uses Argon2id (`memoryCost: 19456`, `timeCost: 2`, `parallelism: 1`). Minimum password length is 8 characters.                                             | Must     |
@@ -26,6 +26,7 @@ Provide unified authentication (JWT, Argon2id), role-based access control (RBAC)
 | AUTH-06 | `POST /api/auth/forgot-password` returns identical generic response whether email exists or not.                                                                            | Must     |
 | AUTH-07 | Password reset token is a cryptographically secure random string whose SHA-256 hash is stored in `PasswordResetToken`, expiring in 30 minutes and invalidated on first use. | Must     |
 | AUTH-08 | `GET /api/auth/me` returns authenticated user identity and role.                                                                                                            | Must     |
+| AUTH-09 | Customer and staff login lock an email and login endpoint for 10 minutes after 5 consecutive invalid credential attempts; a successful login clears the failure count.              | Must     |
 | ADM-01  | Admin user management lists all staff users with pagination and search.                                                                                                     | Must     |
 | ADM-02  | Admin can create staff accounts with assigned roles (`ADMIN`, `SALES`, `INVENTORY`, `FINANCE`).                                                                             | Must     |
 | ADM-03  | Admin can update staff profile and toggle `isActive` status. Deactivated users cannot log in.                                                                               | Must     |
@@ -37,12 +38,14 @@ Provide unified authentication (JWT, Argon2id), role-based access control (RBAC)
 | -------------------- | -------------------------------------------------------------- | --------------------------------------------------- | ----------------------------------------- |
 | `User`               | `id`, `name`, `email`, `passwordHash`, `role`, `isActive`      | `name`, `email`, `passwordHash`, `role`, `isActive` | Argon2id passwords                        |
 | `Customer`           | `id`, `userId`, `name`, `phone`, `email`, `address`            | `userId`, `name`, `phone`, `email`, `address`       | Created during customer registration      |
-| `PasswordResetToken` | `id`, `userId`, `tokenHash`, `expiresAt`, `usedAt`             | `userId`, `tokenHash`, `expiresAt`, `usedAt`        | Single-use, 30m TTL                       |
+| `EmailVerificationCode` | `id`, `email`, `codeHash`, `expiresAt`, `usedAt`             | `email`, `codeHash`, `expiresAt`, `usedAt`          | Single-use 6-digit signup OTP, 10m TTL    |
+| `PasswordResetToken`    | `id`, `userId`, `tokenHash`, `expiresAt`, `usedAt`             | `userId`, `tokenHash`, `expiresAt`, `usedAt`        | Single-use, 30m TTL                       |
 | `AuditLog`           | `id`, `actorId`, `action`, `entityType`, `entityId`, `details` | All fields                                          | Written on user deactivation/role changes |
 
 ## 5. API Endpoints
 
-- `POST /api/auth/register` — Public; creates user and customer; returns JWT and user payload.
+- `POST /api/auth/register/send-code` — Public; sends a 6-digit email verification code via Brevo.
+- `POST /api/auth/register` — Public; verifies the 6-digit code, creates user and customer, and returns JWT and user payload.
 - `POST /api/auth/login` — Public; authenticates customer; returns JWT.
 - `POST /api/auth/staff-login` — Public; authenticates staff; returns JWT.
 - `POST /api/auth/forgot-password` — Public; initiates password reset token email.
@@ -66,14 +69,17 @@ Provide unified authentication (JWT, Argon2id), role-based access control (RBAC)
     - Links to `/register` and back to `/`.
   - **Sign Up (`/register` — `RegisterPage.jsx`):**
     - Matching VÉLORA luxury editorial styling and responsive layout.
-    - Fields aligned with `registerSchema`: `name` (required, 2–100 chars), `email` (required, valid email), `password` (required, min 8 chars, show/hide toggle), `phone` (required, 7–30 chars), `address` (optional; 5–500 chars if provided, omitted from payload when blank).
+    - Step 1 fields aligned with `registerSchema`: `name` (required, 2–100 chars), `email` (required, valid email), `password` (required, min 8 chars, show/hide toggle), `phone` (required, 7–30 chars), `address` (optional; 5–500 chars if provided, omitted from payload when blank). Submitting Step 1 calls `POST /api/auth/register/send-code`.
+    - Step 2 field: `verificationCode` (required, 6 digits) with "Resend code" and "Edit details" actions; submitting calls `POST /api/auth/register`.
     - Client-side validation for usability; backend Zod validation remains authoritative (mapping `error.details` field issues when returned).
-    - Disables submit button and shows loading state while `POST /api/auth/register` is in flight to prevent duplicate submissions.
-    - Handles `400` (`VALIDATION_ERROR`), `409` (`EMAIL_EXISTS`), and network errors.
+    - Disables submit button and shows loading state while requests are in flight to prevent duplicate submissions.
+    - Handles `400` (`VALIDATION_ERROR`, `INVALID_OR_EXPIRED_CODE`), `409` (`EMAIL_EXISTS`), `429` (`RATE_LIMITED`), and network errors.
     - On success: stores `velora_token`, updates auth context, shows confirmation status (`role="status"`), and navigates to `/`.
     - Links to `/login` and back to `/`.
+  - **Forgot / Reset Password (`/forgot-password`, `/reset-password`):**
+    - `ForgotPasswordPage.jsx` (`/forgot-password`): Email field submitting to `POST /api/auth/forgot-password` (sends 6-digit code via Brevo for customers). Shows generic confirmation (`AUTH-06`) and links/navigates to `/reset-password`.
+    - `ResetPasswordPage.jsx` (`/reset-password`): Email, 6-digit verification code, and new password (min 8 chars) submitting to `POST /api/auth/reset-password`, redirecting to `/login` on success.
   - **Storefront Header Integration:** Shows "Sign in" link (`/login`) when unauthenticated, and customer name + "Sign out" action when authenticated.
-  - **Future Scope (separate tasks):** Forgot / Reset Password (`/forgot-password`, `/reset-password?token=...`).
 - **ERP Staff Auth Pages (`client/admin`):**
   - Staff Login (`/login`): Dark luxury layout, role guard notice, error toast on bad credentials.
   - Forgot / Reset Password (`/forgot-password`, `/reset-password?token=...`).
@@ -89,6 +95,7 @@ Provide unified authentication (JWT, Argon2id), role-based access control (RBAC)
 - Public registration can NEVER grant any staff role (`ADMIN`, `SALES`, `INVENTORY`, `FINANCE`).
 - Staff logins must explicitly reject `CUSTOMER` role with 401 generic error.
 - Deactivated accounts (`isActive === false`) receive 403 Forbidden on staff login.
+- Five consecutive invalid credential attempts on either login endpoint lock that email and endpoint for 10 minutes; successful authentication clears the failure count. The lockout is enforced by the API.
 - Reset tokens expire exactly 30 minutes after generation and become invalid immediately upon first successful reset.
 
 ## 8. Acceptance Criteria
@@ -99,6 +106,8 @@ Provide unified authentication (JWT, Argon2id), role-based access control (RBAC)
   - Given a user with role `CUSTOMER`, When attempting login at `POST /api/auth/staff-login`, Then server returns 401 Unauthorized with generic message [AUTH-03].
 - **Scenario:** Deactivated User Login
   - Given a staff user with `isActive = false`, When attempting staff login, Then server rejects request with 403 Forbidden [AUTH-03, ADM-03].
+- **Scenario:** Login Lockout
+  - Given five consecutive invalid credential attempts for the same email on either login endpoint, When another login is attempted, Then the API returns 429 `LOGIN_LOCKED` and blocks attempts for 10 minutes; a successful login clears the prior failure count [AUTH-09].
 - **Scenario:** Generic Forgot Password
   - Given any email address, When submitted to `POST /api/auth/forgot-password`, Then response always returns 200 OK with the exact standard generic confirmation [AUTH-06].
 - **Scenario:** Reset Token Single Use
@@ -114,6 +123,7 @@ Provide unified authentication (JWT, Argon2id), role-based access control (RBAC)
 - `TC-AUTH-06`: Staff login with deactivated account -> 403 Forbidden.
 - `TC-AUTH-07`: Forgot password with unregistered email -> 200 OK generic message.
 - `TC-AUTH-08`: Reset password with expired or reused token -> 400 Bad Request.
+- `TC-AUTH-09`: Five consecutive invalid customer or staff login attempts lock that email and endpoint for 10 minutes; successful login clears the counter.
 - `TC-ADM-01`: Non-admin attempts to access `GET /api/users` -> 403 Forbidden.
 - `TC-ADM-02`: Admin creates new staff user -> 201 Created.
 

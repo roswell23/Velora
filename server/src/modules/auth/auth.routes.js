@@ -2,7 +2,9 @@ import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { validate } from "../../middleware/validate.js";
 import { authenticate } from "../../middleware/auth.js";
+import { loginLockout } from "./loginLockout.js";
 import {
+  sendVerificationCodeHandler,
   registerHandler,
   loginHandler,
   staffLoginHandler,
@@ -11,6 +13,7 @@ import {
   getMeHandler,
 } from "./auth.controller.js";
 import {
+  sendVerificationCodeSchema,
   registerSchema,
   loginSchema,
   forgotPasswordSchema,
@@ -20,12 +23,23 @@ import {
 const router = Router();
 
 // Rate limiters (AUTH-05)
-const loginLimiter = rateLimit({
+const registrationCodeLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5,
   message: {
     success: false,
     error: { code: "RATE_LIMITED", message: "Too many login attempts. Please try again later." },
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  message: {
+    success: false,
+    error: { code: "RATE_LIMITED", message: "Too many login requests. Please try again later." },
   },
   standardHeaders: true,
   legacyHeaders: false,
@@ -43,9 +57,15 @@ const forgotLimiter = rateLimit({
 });
 
 // Public routes
+router.post(
+  "/register/send-code",
+  registrationCodeLimiter,
+  validate(sendVerificationCodeSchema),
+  sendVerificationCodeHandler
+);
 router.post("/register", validate(registerSchema), registerHandler);
-router.post("/login", loginLimiter, validate(loginSchema), loginHandler);
-router.post("/staff-login", loginLimiter, validate(loginSchema), staffLoginHandler);
+router.post("/login", loginLimiter, validate(loginSchema), loginLockout, loginHandler);
+router.post("/staff-login", loginLimiter, validate(loginSchema), loginLockout, staffLoginHandler);
 router.post(
   "/forgot-password",
   forgotLimiter,

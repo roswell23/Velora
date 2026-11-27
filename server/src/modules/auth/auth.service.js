@@ -1,8 +1,13 @@
 import prisma from "../../utils/prisma.js";
 import { hashPassword, verifyPassword } from "../../utils/password.js";
 import { signToken } from "../../utils/jwt.js";
-import { generateResetToken, hashToken } from "../../utils/token.js";
-import { sendPasswordResetEmail } from "../../utils/email.js";
+import {
+  generateOtpCode,
+  generateResetToken,
+  hashOtpCode,
+  hashToken,
+} from "../../utils/token.js";
+import { sendPasswordResetEmail, sendVerificationCodeEmail } from "../../utils/email.js";
 import { env } from "../../config/env.js";
 
 const GENERIC_RESET_MSG =
@@ -16,11 +21,14 @@ const USER_SELECT = {
   isActive: true,
 };
 
+const REGISTRATION_CODE_TTL_MINUTES = 10;
+
 /**
- * AUTH-01: Register a new customer account.
+ * AUTH-01: Send a 6-digit email verification code prior to customer registration.
  */
-export async function register({ name, email, password, phone, address }) {
-  const existing = await prisma.user.findUnique({ where: { email } });
+export async function sendRegistrationCode({ email }) {
+  const normalizedEmail = email.trim().toLowerCase();
+  const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
   if (existing) {
     const err = new Error("An account with that email already exists.");
     err.statusCode = 409;
@@ -28,11 +36,65 @@ export async function register({ name, email, password, phone, address }) {
     throw err;
   }
 
+  const code = generateOtpCode();
+  const codeHash = hashOtpCode("signup", normalizedEmail, code);
+  const expiresAt = new Date(Date.now() + REGISTRATION_CODE_TTL_MINUTES * 60 * 1000);
+
+  await prisma.emailVerificationCode.updateMany({
+    where: { email: normalizedEmail, usedAt: null },
+    data: { usedAt: new Date() },
+  });
+
+  await prisma.emailVerificationCode.create({
+    data: { email: normalizedEmail, codeHash, expiresAt },
+  });
+
+  await sendVerificationCodeEmail(normalizedEmail, code);
+
+  return { message: "A 6-digit verification code has been sent to your email." };
+}
+
+/**
+ * AUTH-01: Verify email code and register a new customer account.
+ */
+export async function register({ name, email, password, phone, address, verificationCode }) {
+  const normalizedEmail = email.trim().toLowerCase();
+  const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+  if (existing) {
+    const err = new Error("An account with that email already exists.");
+    err.statusCode = 409;
+    err.code = "EMAIL_EXISTS";
+    throw err;
+  }
+
+  const codeHash = hashOtpCode("signup", normalizedEmail, verificationCode);
+  const codeRecord = await prisma.emailVerificationCode.findFirst({
+    where: {
+      email: normalizedEmail,
+      codeHash,
+      usedAt: null,
+      expiresAt: { gt: new Date() },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (!codeRecord) {
+    const err = new Error("Verification code is invalid or has expired.");
+    err.statusCode = 400;
+    err.code = "INVALID_OR_EXPIRED_CODE";
+    throw err;
+  }
+
   const passwordHash = await hashPassword(password);
 
   const user = await prisma.$transaction(async (tx) => {
+    await tx.emailVerificationCode.update({
+      where: { id: codeRecord.id },
+      data: { usedAt: new Date() },
+    });
+
     const newUser = await tx.user.create({
-      data: { name, email, passwordHash, role: "CUSTOMER" },
+      data: { name, email: normalizedEmail, passwordHash, role: "CUSTOMER" },
       select: USER_SELECT,
     });
     // Create linked Customer record
@@ -41,7 +103,7 @@ export async function register({ name, email, password, phone, address }) {
         userId: newUser.id,
         name,
         phone,
-        email,
+        email: normalizedEmail,
         address: address || null,
       },
     });
@@ -121,12 +183,18 @@ export async function loginStaff({ email, password }) {
 
 /**
  * AUTH-06: Initiate password reset. Always returns generic message.
+ * Customers receive a 6-digit OTP code; staff receive a reset link token.
  */
 export async function forgotPassword({ email }) {
-  const user = await prisma.user.findUnique({ where: { email } });
+  const normalizedEmail = email.trim().toLowerCase();
+  const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
 
   if (user && user.isActive) {
-    const { token, tokenHash } = generateResetToken();
+    const isCustomer = user.role === "CUSTOMER";
+    const secret = isCustomer ? generateOtpCode() : generateResetToken().token;
+    const tokenHash = isCustomer
+      ? hashOtpCode("reset", normalizedEmail, secret)
+      : hashToken(secret);
     const expiresAt = new Date(Date.now() + env.RESET_TOKEN_TTL_MINUTES * 60 * 1000);
 
     // Invalidate any existing unused tokens for this user
@@ -139,27 +207,30 @@ export async function forgotPassword({ email }) {
       data: { userId: user.id, tokenHash, expiresAt },
     });
 
-    // Fire-and-forget — do not await so response time is not affected by SMTP
-    sendPasswordResetEmail(email, token, user.role).catch((err) => {
+    // Keep the generic response for account privacy, but wait for Brevo so a
+    // rejected send is logged before the request finishes.
+    try {
+      await sendPasswordResetEmail(normalizedEmail, secret, user.role);
+    } catch (err) {
       console.error("[Email] Failed to send reset email:", err.message);
-    });
+    }
   }
 
   return { message: GENERIC_RESET_MSG };
 }
 
 /**
- * AUTH-07: Reset password with valid, unexpired, single-use token.
+ * AUTH-07: Reset password with valid, unexpired, single-use token or customer 6-digit code.
  */
-export async function resetPassword({ token, newPassword }) {
-  const tokenHash = hashToken(token);
+export async function resetPassword({ token, email, code, newPassword }) {
+  const tokenHash = token ? hashToken(token) : hashOtpCode("reset", email, code);
   const record = await prisma.passwordResetToken.findUnique({
     where: { tokenHash },
     include: { user: true },
   });
 
   const INVALID_ERR = (() => {
-    const e = new Error("This password reset link is invalid, expired, or has already been used.");
+    const e = new Error("This password reset code or link is invalid, expired, or has already been used.");
     e.statusCode = 400;
     e.code = "INVALID_OR_EXPIRED_TOKEN";
     return e;

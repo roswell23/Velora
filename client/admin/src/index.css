@@ -1141,6 +1141,16 @@ td.table-primary {
   cursor: pointer;
   transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
 }
+.table-action-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.table-action-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 .table-action-button:hover:not(:disabled),
 .table-action-link:hover {
   border-color: #292c27;
@@ -1261,6 +1271,9 @@ td.table-primary {
 }
 .erp-modal {
   width: min(480px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 24px;
   border: 1px solid #d9d6cc;
   border-radius: 8px;
@@ -1880,6 +1893,7 @@ td.table-primary {
 .stockin-preview {
   display: flex;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
   padding: 10px 12px;
   border: 1px solid #d5e2d5;
@@ -1887,4 +1901,31 @@ td.table-primary {
   background: #f1f7ef;
   color: #38543a;
   font-size: 12px;
+}
+.payment-order-summary {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px 14px;
+  padding: 12px;
+  border: 1px solid #e5e2d8;
+  border-radius: 6px;
+  background: #fbfaf7;
+  font-size: 12px;
+}
+.payment-order-summary span {
+  color: #777970;
+}
+.payment-order-summary strong {
+  color: #292c27;
+  text-align: right;
+}
+
+@media (max-height: 720px) {
+  .erp-modal-backdrop {
+    place-items: start center;
+    overflow-y: auto;
+  }
+  .erp-modal {
+    margin: auto 0;
+  }
 }

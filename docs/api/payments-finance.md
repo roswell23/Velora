@@ -33,6 +33,7 @@ Records payment for a fulfilled order. Only allowed on orders with `status === '
     "order": {
       "id": 10,
       "orderNumber": "VEL-2026-0010",
+      "total": "185.00",
       "paymentStatus": "PAID"
     }
   }
@@ -44,6 +45,7 @@ Records payment for a fulfilled order. Only allowed on orders with `status === '
 - `400 Bad Request`: Order is not in `FULFILLED` status (`ORDER_NOT_FULFILLED`).
 - `400 Bad Request`: Order is already `PAID` (`ORDER_ALREADY_PAID`).
 - `400 Bad Request`: Payment amount does not equal order total (`AMOUNT_MISMATCH`).
+- `404 Not Found`: Order does not exist (`NOT_FOUND`).
 
 ---
 
@@ -89,16 +91,16 @@ Aggregated financial overview metrics.
 {
   "success": true,
   "data": {
-    "totalRevenue": "18500.00",
-    "unpaidTotal": "1450.00",
+    "paidRevenue": "18500.00",
+    "unpaidReceivables": "1450.00",
+    "unpaidOrderCount": 6,
     "inventoryPurchaseCost": "9850.00",
-    "paidOrdersCount": 85,
-    "unpaidFulfilledOrdersCount": 6
+    "stockInCount": 85
   }
 }
 ```
 
-_Note: `totalRevenue` sums orders where `paymentStatus = 'PAID'`. `inventoryPurchaseCost` sums `quantity * unitCost` from `StockMovement` where `type = 'STOCK_IN'`._
+_Note: `paidRevenue` sums confirmed `Payment.amount` records. `inventoryPurchaseCost` sums `quantity * unitCost` from `StockMovement` where `type = 'STOCK_IN'`; amounts are returned as decimal strings._
 
 ---
 

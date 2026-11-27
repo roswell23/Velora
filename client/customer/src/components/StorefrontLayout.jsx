@@ -158,7 +158,7 @@ export default function StorefrontLayout({
                 </button>
               </div>
             ) : (
-              <Link className="auth-header-action" to="/login">
+              <Link className="auth-header-action" to="/login" aria-label="Sign in">
                 <User size={15} strokeWidth={1.5} />
                 <span>Sign in</span>
               </Link>
@@ -183,12 +183,6 @@ export default function StorefrontLayout({
         <Link className="wordmark footer-mark" to="/">
           VÉLORA<span>®</span>
         </Link>
-        <p>The essence of elegance.</p>
-        <div>
-          <Link to="/#story">Our story</Link>
-          <Link to="/catalog">Fragrances</Link>
-          <a href="mailto:hello@velora.example">Contact</a>
-        </div>
         <small>© 2026 VÉLORA. A study in scent.</small>
       </footer>
 

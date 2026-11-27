@@ -259,6 +259,23 @@ model StockMovement {
 }
 
 // ---------------------------------------------------------------------------
+// EmailVerificationCode — Single-use 6-digit signup OTP (10-min TTL)
+// ---------------------------------------------------------------------------
+
+model EmailVerificationCode {
+  id        Int       @id @default(autoincrement())
+  email     String    @db.VarChar(255)
+  codeHash  String    @db.VarChar(64)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([email])
+  @@index([expiresAt])
+  @@map("email_verification_codes")
+}
+
+// ---------------------------------------------------------------------------
 // PasswordResetToken — Secure single-use SHA-256 tokens (30-min TTL)
 // ---------------------------------------------------------------------------
 

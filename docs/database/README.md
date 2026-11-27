@@ -4,7 +4,7 @@ This folder contains the complete centralized database architecture for VÉLORA:
 
 - [`erd.md`](./erd.md): Complete Mermaid Entity-Relationship Diagram (ERD), table specifications, field types, constraints, and relational invariants.
 
-## Summary of Tables (10 Tables)
+## Summary of Tables (11 Tables)
 
 1. `User` — Staff and customer user accounts with Argon2id password hashes and role assignments.
 2. `Customer` — Customer master records (online customer linked to `User`, or walk-in records).
@@ -16,3 +16,4 @@ This folder contains the complete centralized database architecture for VÉLORA:
 8. `StockMovement` — Immutable audit trail of all inventory alterations (`STOCK_IN`, `SALE`, `ADJUSTMENT`).
 9. `PasswordResetToken` — Secure SHA-256 hashed single-use 30-minute expiration tokens.
 10. `AuditLog` — System-level administrative audit trail.
+11. `EmailVerificationCode` — Hashed, single-use signup verification codes with expiration.

@@ -1,6 +1,15 @@
 import * as authService from "./auth.service.js";
 import { sendSuccess } from "../../utils/response.js";
 
+export async function sendVerificationCodeHandler(req, res, next) {
+  try {
+    const result = await authService.sendRegistrationCode(req.body);
+    sendSuccess(res, 200, result);
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function registerHandler(req, res, next) {
   try {
     const result = await authService.register(req.body);

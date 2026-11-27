@@ -8,7 +8,7 @@
  *  - 5 walk-in customer records
  *  - 3 fragrance categories
  *  - 12 perfume products (some intentionally low on stock)
- *  - 2 sample orders (1 ONLINE PENDING, 1 INTERNAL FULFILLED with payment)
+ *  - 3 sample orders (1 ONLINE PENDING, 1 INTERNAL FULFILLED paid, 1 INTERNAL FULFILLED unpaid)
  */
 
 import { PrismaClient, Role, OrderSource, OrderStatus, PaymentStatus } from "@prisma/client";
@@ -519,6 +519,58 @@ async function main() {
     await prisma.order.update({
       where: { id: order2.id },
       data: { paymentStatus: PaymentStatus.PAID },
+    });
+  }
+
+  // Order 3: Internal FULFILLED + UNPAID order for Finance reconciliation demo
+  const existingOrder3 = await prisma.order.findUnique({
+    where: { orderNumber: "VEL-2026-0003" },
+  });
+
+  if (!existingOrder3 && firstWalkIn) {
+    const cedreElite = products["VEL-WOOD-004"];
+    await prisma.$transaction(async (tx) => {
+      await tx.product.update({
+        where: { id: cedreElite.id },
+        data: { stock: { decrement: 1 } },
+      });
+
+      const order3 = await tx.order.create({
+        data: {
+          orderNumber: "VEL-2026-0003",
+          customerId: firstWalkIn.id,
+          source: OrderSource.INTERNAL,
+          createdById: salesUser.id,
+          status: OrderStatus.FULFILLED,
+          paymentStatus: PaymentStatus.UNPAID,
+          deliveryAddress: "VÉLORA Boutique Pickup",
+          total: cedreElite.unitPrice,
+          fulfilledAt: new Date(),
+          fulfilledById: inventoryUser.id,
+          items: {
+            create: [
+              {
+                productId: cedreElite.id,
+                productName: cedreElite.name,
+                unitPrice: cedreElite.unitPrice,
+                quantity: 1,
+                lineTotal: cedreElite.unitPrice,
+              },
+            ],
+          },
+        },
+      });
+
+      await tx.stockMovement.create({
+        data: {
+          productId: cedreElite.id,
+          type: "SALE",
+          quantity: -1,
+          reason: "Order fulfillment: VEL-2026-0003",
+          referenceOrderId: order3.id,
+          performedById: inventoryUser.id,
+        },
+      });
     });
   }
 
