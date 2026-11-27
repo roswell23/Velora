@@ -91,8 +91,12 @@ export default function StorefrontLayout({
   function handleSearchSubmit(event) {
     event.preventDefault();
     const term = activeSearch.trim();
-    if (location.pathname === "/catalog") return;
+    if (location.pathname === "/catalog") {
+      setMenuOpen(false);
+      return;
+    }
     navigate(term ? `/catalog?search=${encodeURIComponent(term)}` : "/catalog");
+    setMenuOpen(false);
   }
 
   return (
@@ -135,6 +139,35 @@ export default function StorefrontLayout({
           <Link to="/#ritual" onClick={() => setMenuOpen(false)}>
             The Vélora ritual
           </Link>
+          <form className="mobile-nav-search" role="search" onSubmit={handleSearchSubmit}>
+            <Search size={16} aria-hidden="true" />
+            <input
+              aria-label="Search fragrances"
+              value={activeSearch}
+              onChange={handleSearchInput}
+              placeholder="Search fragrances"
+            />
+            <button type="submit" aria-label="Submit fragrance search">
+              <ArrowRight size={16} />
+            </button>
+          </form>
+          {!authLoading &&
+            (user ? (
+              <button
+                type="button"
+                className="mobile-nav-account"
+                onClick={() => {
+                  logout();
+                  setMenuOpen(false);
+                }}
+              >
+                Sign out
+              </button>
+            ) : (
+              <Link className="mobile-nav-account" to="/login" onClick={() => setMenuOpen(false)}>
+                Sign in
+              </Link>
+            ))}
         </nav>
         <div className="header-actions">
           <form className="header-search" role="search" onSubmit={handleSearchSubmit}>
