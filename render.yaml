@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: velora-api
+    runtime: node
+    buildCommand: npm ci && npx prisma generate --schema=server/prisma/schema.prisma
+    startCommand: npx prisma migrate deploy --schema=server/prisma/schema.prisma && npm run start --workspace=server
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CUSTOMER_ORIGIN
+        sync: false
+      - key: ADMIN_ORIGIN
+        sync: false
+      - key: JWT_EXPIRES_IN
+        value: 8h
+      - key: ARGON2_MEMORY_COST
+        value: 19456
+      - key: ARGON2_TIME_COST
+        value: 2
+      - key: ARGON2_PARALLELISM
+        value: 1
+      - key: RESET_TOKEN_TTL_MINUTES
+        value: 30
