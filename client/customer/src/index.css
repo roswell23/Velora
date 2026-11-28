@@ -555,6 +555,23 @@ select:focus-visible {
   background: #aa9566;
 }
 
+.best-sellers-section {
+  padding: 76px 8.2% 64px;
+  background: #fbfaf7;
+}
+.best-sellers-grid {
+  margin-top: 34px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 20px;
+}
+.best-sellers-note {
+  margin: 20px 0 0;
+  color: #85867e;
+  font-size: 11px;
+  text-align: right;
+}
+
 .collection-section {
   padding: 98px 8.2% 82px;
   background: var(--paper);
@@ -1671,6 +1688,13 @@ select:focus-visible {
   .collection-section {
     padding-left: 5%;
     padding-right: 5%;
+  }
+  .best-sellers-section {
+    padding: 64px 6%;
+  }
+  .best-sellers-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
   }
   .product-card {
     flex-basis: calc((100% - 18px) / 2.2);

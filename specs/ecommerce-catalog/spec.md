@@ -33,18 +33,21 @@ Deliver a responsive, luxury storefront experience for retail perfume customers:
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------- | -------------- | --------------------------------------------------------- |
 | `Product`  | `id`, `categoryId`, `sku`, `name`, `brand`, `description`, `imageUrl`, `size`, `unitPrice`, `stock`, `reorderLevel`, `isActive` | None           | Read-only from public API; only active products displayed |
 | `Category` | `id`, `name`, `description`                                                                                                     | None           | Read-only category definitions                            |
+| `OrderItem` / `Order` | `productId`, `quantity`, `status` | None | Best sellers rank active products by units in `FULFILLED` orders. |
 
 ## 5. API Endpoints
 
 - `GET /api/categories` — Public; retrieves all categories.
 - `GET /api/products` — Public; queries products with parameters `search`, `categoryId`, `minPrice`, `maxPrice`, `sort`, `page`, `limit`. Excludes inactive products for public shoppers.
 - `GET /api/products/:id` — Public; retrieves single product details.
+- `GET /api/products/best-sellers` — Public; returns up to 4 active products ranked by units in fulfilled orders, with `unitsSold` included. Returns an empty array before any order is fulfilled.
 
 ## 6. UI Pages and Behavior
 
 - **Home Page (`/`):**
   - Luxury hero section with brand typography.
   - Featured products grid and direct link to full catalog.
+  - Best sellers section ranked by fulfilled order item quantity; hidden until sales data exists.
 - **Catalog Page (`/catalog`):**
   - Search bar with debounce.
   - Category filter pills / sidebar.
@@ -88,6 +91,7 @@ Deliver a responsive, luxury storefront experience for retail perfume customers:
 - `TC-ECA-02`: Query products with `categoryId` -> Returns only matching category products.
 - `TC-ECA-03`: Fetch single product by id -> Returns complete product detail and category object.
 - `TC-ECA-04`: Attempt to fetch inactive product -> 404 Not Found.
+- `TC-ECA-05`: Fetch best sellers -> active products are ordered by fulfilled units sold; pending and cancelled orders are excluded.
 
 ## 10. Dependencies on Other Modules
 

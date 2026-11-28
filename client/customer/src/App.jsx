@@ -30,6 +30,7 @@ function StorefrontPage() {
   const { addToBag, syncBagWithProducts } = useBag();
   const location = useLocation();
   const [fragrances, setFragrances] = useState([]);
+  const [bestSellers, setBestSellers] = useState([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState("");
   const [catalogReloadKey, setCatalogReloadKey] = useState(0);
@@ -114,6 +115,21 @@ function StorefrontPage() {
       document.removeEventListener("visibilitychange", handleFocusRefresh);
     };
   }, [catalogReloadKey, syncBagWithProducts]);
+
+  useEffect(() => {
+    let ignore = false;
+    api
+      .get("/products/best-sellers")
+      .then((response) => {
+        if (!ignore) setBestSellers(response.data.map(mapProduct));
+      })
+      .catch(() => {
+        if (!ignore) setBestSellers([]);
+      });
+    return () => {
+      ignore = true;
+    };
+  }, [catalogReloadKey]);
 
   const updateCarouselControls = useCallback(() => {
     const carousel = productCarouselRef.current;
@@ -375,6 +391,31 @@ function StorefrontPage() {
           <i />
           <span>MADE TO BE REMEMBERED</span>
         </section>
+
+        {bestSellers.length > 0 && (
+          <section className="best-sellers-section" aria-labelledby="best-sellers-title">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">LOVED THROUGH AND THROUGH</p>
+                <h2 id="best-sellers-title">
+                  Our <em>best sellers.</em>
+                </h2>
+              </div>
+              <p className="section-aside">The fragrances our customers return to.</p>
+            </div>
+            <div className="best-sellers-grid" role="list" aria-label="Best-selling fragrances">
+              {bestSellers.map((product, index) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  index={index}
+                  showBadge={false}
+                />
+              ))}
+            </div>
+            <p className="best-sellers-note">Ranked by units in fulfilled orders.</p>
+          </section>
+        )}
 
         <section
           className="collection-section"

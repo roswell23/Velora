@@ -94,7 +94,16 @@ Search and filter products catalog.
 
 ---
 
-## 4. `GET /api/products/:id`
+## 4. `GET /api/products/best-sellers`
+
+List up to 4 active products ranked by units included in fulfilled orders. Pending and cancelled orders do not count. The response includes `unitsSold`; an empty array is returned until at least one order is fulfilled.
+
+- **Role:** Public
+- **Response `200 OK`:** Standard success envelope containing product records (including category) and `unitsSold`, sorted from highest to lowest.
+
+---
+
+## 5. `GET /api/products/:id`
 
 Fetch single product details.
 
@@ -124,7 +133,7 @@ Fetch single product details.
 
 ---
 
-## 5. `POST /api/products`
+## 6. `POST /api/products`
 
 Create a new product.
 
@@ -153,7 +162,7 @@ Returns created product with `201 Created`.
 
 ---
 
-## 6. `PUT /api/products/:id`
+## 7. `PUT /api/products/:id`
 
 Update product details. The inventory product details modal uses this endpoint to update the selling price.
 

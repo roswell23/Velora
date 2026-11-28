@@ -10,6 +10,15 @@ export async function listProductsHandler(req, res, next) {
   }
 }
 
+export async function listBestSellingProductsHandler(req, res, next) {
+  try {
+    const products = await productsService.listBestSellingProducts();
+    sendSuccess(res, 200, products);
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function getProductHandler(req, res, next) {
   try {
     const product = await productsService.getProductById(req.params.id, true);

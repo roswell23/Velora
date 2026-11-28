@@ -56,6 +56,36 @@ export async function listProducts(query, publicOnly = false) {
 }
 
 /**
+ * List active products ranked by units in fulfilled orders.
+ * @param {number} [limit]
+ */
+export async function listBestSellingProducts(limit = 4) {
+  const sales = await prisma.orderItem.groupBy({
+    by: ['productId'],
+    where: {
+      order: { status: 'FULFILLED' },
+      product: { isActive: true },
+    },
+    _sum: { quantity: true },
+    orderBy: { _sum: { quantity: 'desc' } },
+    take: limit,
+  });
+
+  if (sales.length === 0) return [];
+
+  const products = await prisma.product.findMany({
+    where: { id: { in: sales.map((sale) => sale.productId) }, isActive: true },
+    include: { category: { select: { id: true, name: true } } },
+  });
+  const productsById = new Map(products.map((product) => [product.id, product]));
+
+  return sales.flatMap((sale) => {
+    const product = productsById.get(sale.productId);
+    return product ? [{ ...product, unitsSold: sale._sum.quantity }] : [];
+  });
+}
+
+/**
  * @param {string} id
  * @param {boolean} [publicOnly]
  */
